@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ArduPilot Thrust Linearisation Calculator</title>
+    <link rel="icon" href="../images/AP_favicon.png" />
+    <script type="text/javascript" src="ThustLinearisationFit.js"></script>
+
+    <link
+      href="https://unpkg.com/tabulator-tables@6.2.0/dist/css/tabulator.min.css"
+      rel="stylesheet"
+    />
+    <!-- <script src="https://unpkg.com/luxon@3.4.4/build/global/luxon.min.js"></script> -->
+    <script src="https://unpkg.com/tabulator-tables@6.2.0/dist/js/tabulator.min.js"></script>
+  </head>
+  <table style="width: 1200px">
+    <tr>
+      <td>
+        <a href="https://ardupilot.org"
+          ><img src="../images/ArduPilot.png"
+        /></a>
+      </td>
+      <td>
+        <a href="https://github.com/ArduPilot/WebTools"
+          ><img src="../images/github-mark.png" style="width: 60px"
+        /></a>
+        <br />
+        <a href="https://github.com/ArduPilot/WebTools"
+          ><img src="../images/GitHub_Logo.png" style="width: 60px"
+        /></a>
+      </td>
+    </tr>
+  </table>
+
+  <style>
+    div.plotly-notifier {
+      visibility: hidden;
+    }
+  </style>
+
+  <h1>
+    <a href="" style="color: #000000; text-decoration: none"
+      >ArduPilot Log Finder</a
+    >
+  </h1>
+
+  <body onload="setup_table();">
+    <div id="example-table"></div>
+  </body>
+</html>
