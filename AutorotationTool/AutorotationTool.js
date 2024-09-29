@@ -11,7 +11,7 @@ function initial_load()
     let plot
 
     // Acceleration
-    jerk_plot.data = [{ mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} deg/s²" }]
+    jerk_plot.data = [{ mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s³" }]
 
     jerk_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false },
@@ -25,7 +25,7 @@ function initial_load()
     Plotly.newPlot(plot, jerk_plot.data, jerk_plot.layout, { displaylogo: false })
 
     // Acceleration
-    accel_plot.data = [{ mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} deg/s²" }]
+    accel_plot.data = [{ mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" }]
 
     accel_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false },
@@ -39,7 +39,7 @@ function initial_load()
     Plotly.newPlot(plot, accel_plot.data, accel_plot.layout, { displaylogo: false })
 
     // velocity
-    vel_plot.data = [{ mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} deg/s" }]
+    vel_plot.data = [{ mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s" }]
 
     vel_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false },
@@ -61,7 +61,7 @@ function initial_load()
     Plotly.newPlot(plot, vel_plot.data, vel_plot.layout, { displaylogo: false })
 
     // position
-    pos_plot.data = [{ mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} deg" }]
+    pos_plot.data = [{ mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" }]
 
     pos_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false },
@@ -98,45 +98,6 @@ function initial_load()
     //     ["vel_plot", vel_plot],
     //     ["pos_plot", pos_plot],
     // ])
-}
-
-function get_param_names_for_axi(axi)
-{
-    let rate_tc = "ACRO_RP_RATE_TC"
-    if (axi == "Y") {
-        rate_tc = "PILOT_Y_RATE_TC"
-    }
-
-    return {
-        rate_max: "ATC_RATE_" + axi + "_MAX",
-        accel_max: "ATC_ACCEL_" + axi + "_MAX",
-        rate_tc
-    }
-}
-
-function update_axis()
-{
-    const axi = document.querySelector('input[name="axis"]:checked').value
-
-    const param_set_id = {
-        R: ["roll_params", "rp_rate_tc"],
-        P: ["pitch_params", "rp_rate_tc"],
-        Y: ["yaw_params", "yaw_rate_tc"]
-    }
-
-    // Hide all
-    for (const ids of Object.values(param_set_id)) {
-        for (const id of ids) {
-            document.getElementById(id).hidden = true
-        }
-    }
-
-    // Show the selected
-    for (const id of param_set_id[axi]) {
-        document.getElementById(id).hidden = false
-    }
-
-    return get_param_names_for_axi(axi)
 }
 
 function update_mode(params)
@@ -238,6 +199,39 @@ function calc_peak_jerk_required(tj, A0, A1)
     return (A1 - A0) * 2.0 / tj;
 }
 
+function calc_seg1_jm(P0, P2, V0, V2, A0, tj)
+{
+    const t1 = P0 - P2;
+    const t2 = (V0 + V2) * tj;
+    const t3 = A0 * tj * tj * (1/3 - 1/(M_PI * M_PI));
+    const t4 = (M_PI * M_PI) / (tj * tj * tj);
+    return (t1 + t2 + t3) / t4;
+}
+
+function calculateAlpha1(P0, P2, V0, V2, alpha2, tj) {
+    // Constants
+    const pi = Math.PI;
+    
+    // Expression in the denominator: (4/3 - 2/pi^2 - 4)
+    const denominatorFactor = (4 / 3) - (2 / (pi * pi)) - 4;
+    
+    // Ensure tj^3 is non-zero to avoid division by zero
+    if (tj === 0) {
+        throw new Error("t_j cannot be zero.");
+    }
+    
+    // Calculate the numerator
+    const numerator = P2 - P0 - 2 * V0 * tj - 2 * V2 * tj + 3 * alpha2 * Math.pow(tj, 3);
+    
+    // Calculate the denominator
+    const denominator = Math.pow(tj, 3) * denominatorFactor;
+    
+    // Calculate alpha1
+    const alpha1 = numerator / denominator;
+    
+    return alpha1;
+}
+
 // special handling function to adapt the enumbent s-curve maths to fit the trajectory of the autorotation
 function arot_s_curve(time_now, T, Jm, A0, V0, P0, Af)
 {
@@ -245,17 +239,17 @@ function arot_s_curve(time_now, T, Jm, A0, V0, P0, Af)
     tj = T * 0.25;
 
     // handle the positive jerk (increasing accel in the first half of the flare time)
-    if (time_now <= T*0.5) {
+    if (time_now <= tj*2.0) {
         return calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0);
     }
 
     // if we got this far then we are doing the negative jerk portion of the trajectory
     // first we need to calculate the initial conditions of the negative trajectory, these are the exit conditions of the positive jerk trajectory
-    let [J1, A1, V1, P1] = calc_javp_for_segment_incr_jerk(T*0.5, T*0.5, Jm, A0, V0, P0);
+    let [J1, A1, V1, P1] = calc_javp_for_segment_incr_jerk(tj*2.0, tj, Jm, A0, V0, P0);
 
     // calculate the peak jerk requried to achieve the requested exit conditions
-    let JM_sec_phase = calc_peak_jerk_required(T*0.5, A1, Af);
-    let t_sec_phase = time_now - T*0.5;
+    let JM_sec_phase = calc_peak_jerk_required(tj*2.0, A1, Af);
+    let t_sec_phase = time_now - tj*2.0;
     return calc_javp_for_segment_incr_jerk(t_sec_phase, tj, JM_sec_phase, A1, V1, P1);
 }
 
@@ -292,10 +286,19 @@ function run_flare()
     const V0 = parseFloat(document.getElementById("initial_vel").value);
     const P0 = parseFloat(document.getElementById("initial_pos").value);
 
-    const Af = parseFloat(document.getElementById("final_accel").value);
+    const A2 = parseFloat(document.getElementById("final_accel").value);
+    const V2 = parseFloat(document.getElementById("final_vel").value);
+    const P2 = parseFloat(document.getElementById("final_pos").value);
 
     const Jm = parseFloat(document.getElementById("max_jerk").value);
     const T = parseFloat(document.getElementById("flare_time").value);
+
+    const jm_seg1_est = calc_seg1_jm(P0, P2, V0, V2, A0, T*0.25);
+    console.log(jm_seg1_est);
+
+    var gpt_alpha1 = calculateAlpha1(P0, P2, V0, V2, -19/2.0, T*0.5)
+    var jm2 = gpt_alpha1*2
+    console.log(`GPT Answer = ${jm2}`);
 
     // init a time vector
     const t = linspace(0.0, T, 1000);
@@ -303,7 +306,7 @@ function run_flare()
     var traj = new Trajectory();
     for (var i = 0; i < t.length; i++) {
         // calculate the variables for the trajectory
-        const [Jt, At, Vt, Pt] = arot_s_curve(t[i], T, Jm, A0, V0, P0, Af);
+        const [Jt, At, Vt, Pt] = arot_s_curve(t[i], T, Jm, A0, V0, P0, A2);
         traj.j.push(Jt);
         traj.a.push(At);
         traj.v.push(Vt);
@@ -326,124 +329,5 @@ function run_flare()
     pos_plot.data[0].x = t
     pos_plot.data[0].y = traj.p
     Plotly.redraw("pos_plot")
-
-}
-
-function run_attitude()
-{
-    const param_names = update_axis()
-    const mode = update_mode(param_names)
-
-    const desired_pos = wrap_PI(radians(parseFloat(document.getElementById("desired_pos").value)))
-    const desired_vel = radians(parseFloat(document.getElementById("desired_vel").value))
-    const end_time = parseFloat(document.getElementById("end_time").value)
-    const max_time = 20
-
-    const dt = 1/400
-
-    const vel_limit = radians(parseFloat(document.getElementById(param_names.rate_max).value))
-    const accel_limit = radians(parseFloat(document.getElementById(param_names.accel_max).value) * 0.01)
-    const input_tc = parseFloat(document.getElementById("ATC_INPUT_TC").value)
-    const rate_tc = parseFloat(document.getElementById(param_names.rate_tc).value)
-
-    const pos_tol = radians(0.1)
-    const vel_tol = radians(0.1)
-
-    // Initial state
-    let time = [0]
-    let pos = [wrap_PI(radians(parseFloat(document.getElementById("initial_pos").value)))]
-    let vel = [radians(parseFloat(document.getElementById("initial_vel").value))]
-    let accel = [0]
-
-    // Run until current reaches target
-    let i = 1
-    let done_time
-    while(true) {
-
-        let vel_target
-        if (mode.use_pos) {
-
-            let desired_vel_plot = 0
-            let max_vel_plot = 0
-            if (mode.use_vel) {
-                desired_vel_plot = desired_vel
-                max_vel_plot = vel_limit
-            }
-            const pos_error = wrap_PI(desired_pos - pos[i-1])
-            vel_target = input_shaping_angle(pos_error, input_tc, accel_limit, vel[i-1], desired_vel_plot, max_vel_plot, dt)
-
-        } else if (mode.use_vel) {
-            vel_target = input_shaping_vel_plot(vel[i-1], desired_vel, accel_limit, dt, rate_tc)
-        }
-
-        if (is_positive(vel_limit)) {
-            vel_target = constrain_float(vel_target, -vel_limit, vel_limit)
-        }
-
-        // update velocity
-        vel[i] = vel_target
-
-        // Integrate to position
-        pos[i] = wrap_PI(pos[i-1] + (vel[i-1] + vel_target) * dt * 0.5)
-
-        // Differentiate to accel
-        accel[i] = (vel_target - vel[i-1]) / dt
-
-        // update time
-        time[i] = i * dt
-
-        // Check if the target has been reached
-        if (done_time == null) {
-            let done = false
-            if (mode.use_pos) {
-                done = Math.abs(wrap_PI(desired_pos - pos[i])) < pos_tol
-
-            } else if (mode.use_vel) {
-                done = Math.abs(desired_vel - vel[i]) < vel_tol
-            }
-            if (done) {
-                done_time = time[i]
-            }
-
-        } else {
-            if (time[i] > Math.max(done_time + 0.5, end_time)) {
-                // Run for a short time after completion
-                break
-            }
-        }
-
-
-        if (time[i] >= max_time) {
-            // Reached max time
-            break
-        }
-        i++
-    }
-
-    // Convert to degrees
-    for (let i = 0; i < pos.length; i++) {
-        pos[i] = degrees(pos[i])
-        vel[i] = degrees(vel[i])
-        accel[i] = degrees(accel[i])
-    }
-
-    // Update plots
-    pos_plot.data[0].x = time
-    pos_plot.data[0].y = pos
-    pos_plot.layout.shapes[0].y0 = degrees(desired_pos)
-    pos_plot.layout.shapes[0].y1 = degrees(desired_pos)
-    pos_plot.layout.shapes[0].visible = mode.use_pos
-    Plotly.redraw("pos_plot")
-
-    vel_plot.data[0].x = time
-    vel_plot.data[0].y = vel
-    vel_plot.layout.shapes[0].y0 = degrees(desired_vel)
-    vel_plot.layout.shapes[0].y1 = degrees(desired_vel)
-    vel_plot.layout.shapes[0].visible = mode.use_vel
-    Plotly.redraw("vel_plot")
-
-    accel_plot.data[0].x = time
-    accel_plot.data[0].y = accel
-    Plotly.redraw("accel_plot")
 
 }
