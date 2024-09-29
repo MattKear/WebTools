@@ -1,9 +1,8 @@
 ### Defining Equations:
 
 **Equation 1:**
-\[
-P_1 = P_0 + 2V_0 t_j + 2A_0 t_j^2 + \alpha_1 t_j^3 \left( \frac{4}{3} - \frac{2}{\pi^2} \right)
-\]
+
+$ P_1 = P_0 + 2V_0 t_j + 2A_0 t_j^2 + \alpha_1 t_j^3 \left( \frac{4}{3} - \frac{2}{\pi^2} \right) $
 
 **Equation 2:**
 \[
