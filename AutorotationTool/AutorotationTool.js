@@ -208,29 +208,42 @@ function calc_seg1_jm(P0, P2, V0, V2, A0, tj)
     return (t1 + t2 + t3) / t4;
 }
 
-function calculateAlpha1(P0, P2, V0, V2, alpha2, tj) {
-    // Constants
+function calculateAlpha1(P0, P2, V0, V2, A0, A2, Alpha2, tj) {
     const pi = Math.PI;
-    
-    // Expression in the denominator: (4/3 - 2/pi^2 - 4)
-    const denominatorFactor = (4 / 3) - (2 / (pi * pi)) - 4;
-    
-    // Ensure tj^3 is non-zero to avoid division by zero
-    if (tj === 0) {
-        throw new Error("t_j cannot be zero.");
-    }
-    
-    // Calculate the numerator
-    const numerator = P2 - P0 - 2 * V0 * tj - 2 * V2 * tj + 3 * alpha2 * Math.pow(tj, 3);
-    
-    // Calculate the denominator
-    const denominator = Math.pow(tj, 3) * denominatorFactor;
-    
-    // Calculate alpha1
-    const alpha1 = numerator / denominator;
-    
-    return alpha1;
+
+    // Calculate the alpha factor
+    const alphaFactor = (4 / 3) - (2 / (pi * pi));
+
+    // Rearranged equation for alpha1
+    const numerator = -(P0 - P2) - 2 * (V0 - V2) * tj - 2 * (A0 - A2) * tj * tj;
+    const denominator = Math.pow(tj, 3) * alphaFactor;
+
+    const Alpha1 = Alpha2 + (numerator / denominator);
+
+    return Alpha1;
 }
+
+function fwd_project_position(P0, V0, A0, alpha1, tj)
+{
+    return P0 + 2 * V0 * tj + 2 * A0 * tj * tj + alpha1 * tj * tj *tj * (4/3 - 2 / (M_PI * M_PI))
+}
+
+function back_project_position(P0, V0, A0, Alpha, tj) {
+    const pi = Math.PI;
+
+    // Calculate terms
+    const term1 = P0;
+    const term2 = 2 * V0 * tj;
+    const term3 = 2 * A0 * tj * tj;
+    const term4 = (-2 * Alpha * tj) / (pi * pi);
+    const term5 = Alpha * tj * tj * tj * (4 / 3 - 2 / (pi * pi));
+
+    // Calculate the final position
+    const Pt = term1 + term2 + term3 + term4 + term5;
+
+    return Pt;
+}
+
 
 // special handling function to adapt the enumbent s-curve maths to fit the trajectory of the autorotation
 function arot_s_curve(time_now, T, Jm, A0, V0, P0, Af)
@@ -269,6 +282,25 @@ function calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0)
     return [Jt, At, Vt, Pt];
 }
 
+// Calculate the jerk, acceleration, velocity and position at time time_now when running the decreasing jerk magnitude time segment based on a raised cosine profile
+function calc_javp_for_segment_decr_jerk(time_now, tj, Jm, A0, V0, P0)
+{
+    var Jt = 0.0, At = A0, Vt = V0, Pt = P0;
+    if (!is_positive(tj)) {
+        return [Jt, At, Vt, Pt];
+    }
+    const Alpha = Jm * 0.5;
+    const Beta = M_PI / tj;
+    const AT = Alpha * tj;
+    const VT = Alpha * ((tj * tj) * 0.5 - 2.0 / (Beta * Beta));
+    const PT = Alpha * ((-1.0 / (Beta * Beta)) * tj + (1.0 / 6.0) * (tj * tj * tj));
+    Jt = Alpha * (1.0 - Math.cos(Beta * (time_now + tj)));
+    At = (A0 - AT) + Alpha * (time_now + tj) - (Alpha / Beta) * Math.sin(Beta * (time_now + tj));
+    Vt = (V0 - VT) + (A0 - AT) * time_now + 0.5 * Alpha * (time_now + tj) * (time_now + tj) + (Alpha / (Beta * Beta)) * Math.cos(Beta * (time_now + tj)) - Alpha / (Beta * Beta);
+    Pt = (P0 - PT) + (V0 - VT) * time_now + 0.5 * (A0 - AT) * (time_now * time_now) + (-Alpha / (Beta * Beta)) * (time_now + tj) + (Alpha / 6.0) * (time_now + tj) * (time_now + tj) * (time_now + tj) + (Alpha / (Beta * Beta * Beta)) * Math.sin(Beta * (time_now + tj));
+    return [Jt, At, Vt, Pt];
+}
+
 class Trajectory
 {
     constructor()
@@ -296,9 +328,18 @@ function run_flare()
     const jm_seg1_est = calc_seg1_jm(P0, P2, V0, V2, A0, T*0.25);
     console.log(jm_seg1_est);
 
-    var gpt_alpha1 = calculateAlpha1(P0, P2, V0, V2, -19/2.0, T*0.5)
-    var jm2 = gpt_alpha1*2
-    console.log(`GPT Answer = ${jm2}`);
+    console.log(`P0 = ${P0}`);
+    console.log(`P2 = ${P2}`);
+    console.log(`V0 = ${V0}`);
+    console.log(`V2 = ${V2}`);
+
+    var pred_P1 = fwd_project_position(P0, V0, A0, 13.0/2.0, T*0.25) // This matches
+    console.log(`Predicted P1 = ${pred_P1} m`);
+
+    let [J1_pred, A1_pred, V1_pred, P1_pred] = calc_javp_for_segment_incr_jerk(T*0.5, T*0.25, 19, A2, V2, P2) // --- this is giving the correct answer
+    console.log(`javp Predicted P1 = ${P1_pred+0.07599} m`);
+
+
 
     // init a time vector
     const t = linspace(0.0, T, 1000);
@@ -312,6 +353,10 @@ function run_flare()
         traj.v.push(Vt);
         traj.p.push(Pt);
     }
+
+    var gpt_alpha1 = calculateAlpha1(P0, P2+traj.p[traj.p.length-1], V0, V2, A0, A2, 19/2, T*0.25) // <------ this works!!!!!!!!!!!!, fuck yeah!
+    var jm2 = gpt_alpha1*2
+    console.log(`Jm 1 Predicition = ${jm2}`);
 
     // Update plots
     jerk_plot.data[0].x = t
