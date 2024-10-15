@@ -270,6 +270,7 @@ function calc_alpha2_halfway_conditions(A0, V0, P0, P1, tj)
     return alpha
 }
 
+
 function calculateAlpha2_from_diff(P0, P2, V0, V2, A0, A2, Alpha1, tj) {
     const pi = Math.PI;
 
@@ -323,7 +324,7 @@ function arot_calculated_s_curve(time_now, T, A0, V0, P0, A2, V2, P2, Jm1, Jm2)
 
     let t_sec_phase = time_now - tj*2.0;
 
-    return calc_javp_for_segment_incr_jerk(t_sec_phase, tj, Jm2, A2+A1, V1, P1);
+    return calc_javp_for_segment_incr_jerk(t_sec_phase, tj, Jm2, A1, V1, P1);
 }
 
 // Calculate the jerk, acceleration, velocity and position at time time_now when running the increasing jerk magnitude time segment based on a raised cosine profile
@@ -342,24 +343,58 @@ function calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0)
     return [Jt, At, Vt, Pt];
 }
 
-// Calculate the jerk, acceleration, velocity and position at time time_now when running the decreasing jerk magnitude time segment based on a raised cosine profile
-function calc_javp_for_segment_decr_jerk(time_now, tj, Jm, A0, V0, P0)
+// allowing for alpha1, alpha2, and peak accel (A1) to be resolved
+function three_var_prediction(P0, P2, V0, V2, A0, A2, tj)
 {
-    var Jt = 0.0, At = A0, Vt = V0, Pt = P0;
-    if (!is_positive(tj)) {
-        return [Jt, At, Vt, Pt];
-    }
-    const Alpha = Jm * 0.5;
-    const Beta = M_PI / tj;
-    const AT = Alpha * tj;
-    const VT = Alpha * ((tj * tj) * 0.5 - 2.0 / (Beta * Beta));
-    const PT = Alpha * ((-1.0 / (Beta * Beta)) * tj + (1.0 / 6.0) * (tj * tj * tj));
-    Jt = Alpha * (1.0 - Math.cos(Beta * (time_now + tj)));
-    At = (A0 - AT) + Alpha * (time_now + tj) - (Alpha / Beta) * Math.sin(Beta * (time_now + tj));
-    Vt = (V0 - VT) + (A0 - AT) * time_now + 0.5 * Alpha * (time_now + tj) * (time_now + tj) + (Alpha / (Beta * Beta)) * Math.cos(Beta * (time_now + tj)) - Alpha / (Beta * Beta);
-    Pt = (P0 - PT) + (V0 - VT) * time_now + 0.5 * (A0 - AT) * (time_now * time_now) + (-Alpha / (Beta * Beta)) * (time_now + tj) + (Alpha / 6.0) * (time_now + tj) * (time_now + tj) * (time_now + tj) + (Alpha / (Beta * Beta * Beta)) * Math.sin(Beta * (time_now + tj));
-    return [Jt, At, Vt, Pt];
+    const c1 = 4 / 3 - 2 / (M_PI*M_PI);
+
+    // Calculate alpha1
+    const term1 = (V2 - V0) / (2 * tj * tj);
+    const term2 = -2 * A0 / tj;
+    const term3 = (P2 - P0) / (tj * tj * tj * c1);
+    const term4 = 2 * (V2 - V0) / (tj * tj * c1);
+    const term5 = 2 * (A2 - A0) / (tj * c1);
+    alpha1 = 0.25 * term1 + term2 + term3 + term4 + term5;
+
+    // Calculate alpha2
+    const numerator = (P0 - P2) + 2 * (V0 - V2) * tj + 2 * (A0 - A2) * tj * tj;
+    const denominator = tj * tj * tj * c1;
+
+    const alpha2 = alpha1 + (numerator / denominator);
+
+    return [alpha1, alpha2];
 }
+
+
+function v4_prediction(A0, A1, V0, V2, tj)
+{
+    const alpha1 = (A1 - A0) / (2 * tj);
+
+    const term1 = (V2 - V0) / (2 * tj * tj);
+    const term2 = (A1 - A0) / tj;
+    const alpha2 = term1 + term2 - alpha1;
+
+    return [alpha1, alpha2]
+}
+
+// Calculate the jerk, acceleration, velocity and position at time time_now when running the decreasing jerk magnitude time segment based on a raised cosine profile
+// function calc_javp_for_segment_decr_jerk(time_now, tj, Jm, A0, V0, P0)
+// {
+//     var Jt = 0.0, At = A0, Vt = V0, Pt = P0;
+//     if (!is_positive(tj)) {
+//         return [Jt, At, Vt, Pt];
+//     }
+//     const Alpha = Jm * 0.5;
+//     const Beta = M_PI / tj;
+//     const AT = Alpha * tj;
+//     const VT = Alpha * ((tj * tj) * 0.5 - 2.0 / (Beta * Beta));
+//     const PT = Alpha * ((-1.0 / (Beta * Beta)) * tj + (1.0 / 6.0) * (tj * tj * tj));
+//     Jt = Alpha * (1.0 - Math.cos(Beta * (time_now + tj)));
+//     At = (A0 - AT) + Alpha * (time_now + tj) - (Alpha / Beta) * Math.sin(Beta * (time_now + tj));
+//     Vt = (V0 - VT) + (A0 - AT) * time_now + 0.5 * Alpha * (time_now + tj) * (time_now + tj) + (Alpha / (Beta * Beta)) * Math.cos(Beta * (time_now + tj)) - Alpha / (Beta * Beta);
+//     Pt = (P0 - PT) + (V0 - VT) * time_now + 0.5 * (A0 - AT) * (time_now * time_now) + (-Alpha / (Beta * Beta)) * (time_now + tj) + (Alpha / 6.0) * (time_now + tj) * (time_now + tj) * (time_now + tj) + (Alpha / (Beta * Beta * Beta)) * Math.sin(Beta * (time_now + tj));
+//     return [Jt, At, Vt, Pt];
+// }
 
 class Trajectory
 {
@@ -371,6 +406,17 @@ class Trajectory
         this.p = []; // pos (m)
     }
 }
+
+// function update_initial_position()
+// {
+//     const P2 = parseFloat(document.getElementById("final_pos").value);
+//     const P0 = parseFloat(document.getElementById("initial_pos").value);
+//     console.log(P0)
+//     console.log(P2)
+//     document.getElementById("initial_pos").value = P0 + P2;
+//     run_flare()
+// }
+
 
 function run_flare()
 {
@@ -402,7 +448,7 @@ function run_flare()
     console.log(`Jm 2 Predicition = ${jm2.toFixed(4)} (m/s³)`);
 
     var alpha1_pred = calculateAlpha1(P0, P2, V0, V2, A0, A2, alpha2_pred, T*0.25) // <------ this works!!!!!!!!!!!!, fuck yeah!
-    var jm1 = alpha1_pred*2
+    var jm1 = alpha1_pred*2;
     console.log(`Jm 1 Predicition = ${jm1.toFixed(4)} (m/s³)`);
 
     // V2 calculation
@@ -413,9 +459,13 @@ function run_flare()
 
     // now calculate the alpha2 required to meet my requested exit conditions
     let [J1_v2, A1_v2, V1_v2, P1_v2] = calc_javp_for_segment_incr_jerk(T*0.5, T*0.25, jm1_v2, A0, V0, P0);
-    const alpha_2_v2 = calc_alpha2_halfway_conditions(A2, V2, P2, P1_v2, -T*0.25);
+    // const alpha_2_v2 = calc_alpha2_halfway_conditions(A2, V2, P2, P1_v2, -T*0.25);
     // const alpha_2_v2 = calc_alpha2_halfway_conditions(A1_v2, V1_v2, P1_v2, P2, T*0.25);
-    // const alpha_2_v2 = calc_alpha1_from_peak_accel(A2, AZm, T*0.25)
+    console.log(P2)
+    console.log(V2)
+    console.log(A2)
+    // const alpha_2_v2 = calculateAlpha2_from_diff(P0, P2, V0, V2, A0, A2, alpha_1_v2, T*0.25) 
+    const alpha_2_v2 = calc_alpha1_from_peak_accel(A2, AZm, T*0.25)
     const jm2_v2 = alpha_2_v2*2.0;
     console.log(`Jm 2 V2 Predicition = ${jm2_v2.toFixed(4)} (m/s³)`);
 
@@ -423,10 +473,24 @@ function run_flare()
     // the final desired position and the projected distance to be traveled
     let [J2_v2, A2_v2, V2_v2, P2_v2] = calc_javp_for_segment_incr_jerk(T*0.5, T*0.25, jm2_v2, A1_v2, V1_v2, P1_v2)
     // update the initial position
-    P0 = P0 - P2_v2
-    console.log(P1_v2)
-    console.log(P2_v2)
-    document.getElementById("initial_pos").value = P0
+    // P0 = P0 - P2_v2
+    // console.log(P1_v2)
+    // console.log(P2_v2)
+    // document.getElementById("initial_pos").value = P0
+
+
+    let [alpha1_v3, alpha2_v3] = three_var_prediction(P0, P2, V0, V2, A0, A2, T*0.25);
+    const jm1_v3 = alpha1_v3*2.0;
+    const jm2_v3 = alpha2_v3*2.0;
+    console.log(`Jm 1 V3 Predicition = ${jm1_v3.toFixed(4)} (m/s³)`);
+    console.log(`Jm 2 V3 Predicition = ${jm2_v3.toFixed(4)} (m/s³)`);
+
+
+    let [alpha1_v4, alpha2_v5] = v4_prediction(A0, AZm, V0, V2, T*0.25);
+    const jm1_v4 = alpha1_v4*2.0;
+    const jm2_v4 = alpha2_v5*2.0;
+    console.log(`Jm 1 V3 Predicition = ${jm1_v4.toFixed(4)} (m/s³)`);
+    console.log(`Jm 2 V3 Predicition = ${jm2_v4.toFixed(4)} (m/s³)`);
 
     // updated method that calculates the neccassary jerk peaks to achieve the entry and exit conditions
     // "smart" method
@@ -434,7 +498,8 @@ function run_flare()
     for (var i = 0; i < t.length; i++) {
         // calculate the variables for the trajectory
         // const [Jt, At, Vt, Pt] = arot_calculated_s_curve(t[i], T, A0, V0, P0, A2, V2, P2, jm1, -jm2);
-        const [Jt, At, Vt, Pt] = arot_calculated_s_curve(t[i], T, A0, V0, P0, A2, V2, P2, jm1_v2, jm2_v2);
+        // const [Jt, At, Vt, Pt] = arot_calculated_s_curve(t[i], T, A0, V0, P0, A2, V2, P2, -jm1_v3, jm2_v3);
+        const [Jt, At, Vt, Pt] = arot_calculated_s_curve(t[i], T, A0, V0, P0, A2, V2, P2, jm1_v4, -jm2_v4);
         calcd_traj.j.push(Jt);
         calcd_traj.a.push(At);
         calcd_traj.v.push(Vt);
