@@ -8,11 +8,8 @@ accel_plot = {}
 jerk_plot = {}
 snap_plot = {}
 wp_pos_plot = {}
-function initial_load()
-{
-    let plot;
 
-    // Waypoints
+function reset_wp_plot_data() {
     wp_pos_plot.data = [{ type:'scatter3d',  x:[], y:[], z:[], name: 'WP', mode: 'lines+markers', hovertemplate: "<extra></extra>%{x:.0f} m<br>%{y:.0f} m<br>%{z:.0f} m" },
                         { type:'scatter3d',  x:[], y:[], z:[],
                           name: 'Target',
@@ -29,14 +26,25 @@ function initial_load()
                           missionLeg: [] // A custom attribute that we can use to see what leg we are on in a callback
                          }
                         ];
+}
+
+
+function initial_load()
+{
+    let plot;
+
+    // Waypoints
+    reset_wp_plot_data()
 
     wp_pos_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false },
         margin: { b: 50, l: 60, r: 50, t: 20 },
         scene: {
-            xaxis: { title: {text: "East (m)" }, autorange: "reversed" },
-            yaxis: { title: {text: "North (m)"}, autorange: "reversed" },
-            zaxis: { title: {text: "Up (m)" } }
+            xaxis: { title: {text: "North (m)" }, autorange: false },
+            yaxis: { title: {text: "East (m)"}, autorange: false },
+            zaxis: { title: {text: "Up (m)" }, autorange: false },
+            aspectmode: "cube"
+            // aspectratio: { x: 1, y: 1, z: 1 }  // Equal scaling }  // Forces equal scaling on all axes
         }
     }
 
@@ -48,11 +56,14 @@ function initial_load()
     plot.on("plotly_click", function (data) {
         let selected_pt = data.points[0].pointNumber;
         let point = data.points[0]; // Get first selected point
-        let mission_leg = point.data.missionLeg[selected_pt];
+        let mission_leg;
+        if (typeof point.data.missionLeg !== "undefined") {
+            mission_leg = point.data.missionLeg[selected_pt];
+        }
         console.log(`Clicked on (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)}) in ${point.data.name}, on leg: ${mission_leg}`);
 
         // plot the s-curves for the selected leg
-        plot_scurves([mission_leg], true);
+        // plot_scurves([mission_leg], true);
     });
 
     setup_kinematic_plots();
@@ -172,6 +183,69 @@ function setup_kinematic_plots() {
         ["vel_plot", vel_plot],
         ["pos_plot", pos_plot],
     ])
+}
+
+// flor plotting 3D spheres around the waypoints to show the effect of WPNAV_RADIUS param
+function generate_plotly_sphere(center, radius, steps) {
+    let x = [], y = [], z = [], i = [], j = [], k = [];
+
+    const ang_step = Math.PI / steps;
+
+    for (let theta = 0; theta < Math.PI; theta += ang_step) {
+        for (let phi = 0; phi < 2 * Math.PI; phi += ang_step) {
+            let x1 = center.x + radius * Math.sin(theta) * Math.cos(phi);
+            let y1 = center.y + radius * Math.sin(theta) * Math.sin(phi);
+            let z1 = center.z + radius * Math.cos(theta);
+            x.push(x1);
+            y.push(y1);
+            z.push(z1);
+        }
+    }
+
+    for (let m = 0; m < steps - 1; m++) {
+        for (let n = 0; n < steps * 2 - 1; n++) {
+            let p1 = m * steps * 2 + n;
+            let p2 = p1 + 1;
+            let p3 = p1 + steps * 2;
+            let p4 = p3 + 1;
+            
+            i.push(p1, p2, p3, p2, p4, p3);
+            j.push(p2, p4, p4, p4, p3, p3);
+            k.push(p3, p3, p1, p1, p1, p2);
+        }
+    }
+
+    return {
+        type: "mesh3d",
+        x: x, y: y, z: z,
+        i: i, j: j, k: k,
+        opacity: 0.3, // Transparency
+        color: "rgba(255, 0, 0, 0.5)",
+        flatshading: true
+    };
+}
+
+function get_range(data) {
+    let min_val;
+    let max_val;
+    for (let i = 0; i < data.length; i++) {
+
+        const min_v = Math.min(...data[i].x, ...data[i].y, ...data[i].z);
+        const max_v = Math.max(...data[i].x, ...data[i].y, ...data[i].z);
+
+        if (typeof min_val === "undefined") {
+            min_val = min_v;
+        } else {
+            min_val = Math.min(min_val, min_v);
+        }
+
+        if (typeof max_val === "undefined") {
+            max_val = max_v;
+        } else {
+            max_val = Math.max(max_val, max_v);
+        }
+    }
+    return [min_val, max_val];
 }
 
 // Utility functions
@@ -1659,6 +1733,7 @@ function update()
     }
 
     // Update plots
+    reset_wp_plot_data();
     wp_pos_plot.data[0].x = [point1.x, point2.x, point3.x, point4.x];
     wp_pos_plot.data[0].y = [point1.y, point2.y, point3.y, point4.y];
     wp_pos_plot.data[0].z = [point1.z, point2.z, point3.z, point4.z];
@@ -1670,7 +1745,24 @@ function update()
     // colour the line based on velocity magnitude
     wp_pos_plot.data[1].line.color = vel_targ.map(v => v.length());
 
-    Plotly.redraw("waypoint_plot")
+    const wp1_sphere = generate_plotly_sphere(point1, wp_nav.wp_radius_cm*0.01, 100);
+    const wp2_sphere = generate_plotly_sphere(point2, wp_nav.wp_radius_cm*0.01, 100);
+    const wp3_sphere = generate_plotly_sphere(point3, wp_nav.wp_radius_cm*0.01, 100);
+    const wp4_sphere = generate_plotly_sphere(point4, wp_nav.wp_radius_cm*0.01, 100);
+
+    wp_pos_plot.data.push(wp1_sphere);
+    wp_pos_plot.data.push(wp2_sphere);
+    wp_pos_plot.data.push(wp3_sphere);
+    wp_pos_plot.data.push(wp4_sphere);
+
+    const [ax_min, ax_max] = get_range(wp_pos_plot.data);
+
+    wp_pos_plot.layout.scene.xaxis["range"] = [ax_max, ax_min]; // reversed
+    wp_pos_plot.layout.scene.yaxis["range"] = [ax_min, ax_max];
+    wp_pos_plot.layout.scene.zaxis["range"] = [ax_min, ax_max];
+
+    plot = document.getElementById("waypoint_plot")
+    Plotly.newPlot(plot, wp_pos_plot.data, wp_pos_plot.layout, { displaylogo: false })
 
     plot_scurves([1,2,3], false);
 
