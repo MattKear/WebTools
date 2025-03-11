@@ -1745,16 +1745,18 @@ function update()
     // colour the line based on velocity magnitude
     wp_pos_plot.data[1].line.color = vel_targ.map(v => v.length());
 
-    const wp1_sphere = generate_plotly_sphere(point1, wp_nav.wp_radius_cm*0.01, 100);
-    const wp2_sphere = generate_plotly_sphere(point2, wp_nav.wp_radius_cm*0.01, 100);
-    const wp3_sphere = generate_plotly_sphere(point3, wp_nav.wp_radius_cm*0.01, 100);
-    const wp4_sphere = generate_plotly_sphere(point4, wp_nav.wp_radius_cm*0.01, 100);
+    const wp_display_cb = document.getElementById("display_wp_radius");
+    if (wp_display_cb.checked) {
+        const wp1_sphere = generate_plotly_sphere(point1, wp_nav.wp_radius_cm*0.01, 100);
+        const wp2_sphere = generate_plotly_sphere(point2, wp_nav.wp_radius_cm*0.01, 100);
+        const wp3_sphere = generate_plotly_sphere(point3, wp_nav.wp_radius_cm*0.01, 100);
+        const wp4_sphere = generate_plotly_sphere(point4, wp_nav.wp_radius_cm*0.01, 100);
 
-    wp_pos_plot.data.push(wp1_sphere);
-    wp_pos_plot.data.push(wp2_sphere);
-    wp_pos_plot.data.push(wp3_sphere);
-    wp_pos_plot.data.push(wp4_sphere);
-
+        wp_pos_plot.data.push(wp1_sphere);
+        wp_pos_plot.data.push(wp2_sphere);
+        wp_pos_plot.data.push(wp3_sphere);
+        wp_pos_plot.data.push(wp4_sphere);
+    }
     const [ax_min, ax_max] = get_range(wp_pos_plot.data);
 
     wp_pos_plot.layout.scene.xaxis["range"] = [ax_max, ax_min]; // reversed
