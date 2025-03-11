@@ -52,7 +52,7 @@ function initial_load()
         console.log(`Clicked on (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)}) in ${point.data.name}, on leg: ${mission_leg}`);
 
         // plot the s-curves for the selected leg
-        //plot_scurves([mission_leg], true);
+        plot_scurves([mission_leg], true);
     });
 
     setup_kinematic_plots();
@@ -761,15 +761,17 @@ class SCurve {
             let turn_vel = new Vector();
             let turn_accel = new Vector();
             //let time_test = this.get_time_elapsed() + time_to_destination * 0.5;
-            [turn_pos, turn_vel, turn_accel] = this.move_from_time_pos_vel_accel(this.get_time_elapsed() + time_to_destination * 0.5, turn_pos, turn_vel, turn_accel, false); // don't log here as we are computing the turn point needed for the next leg, not this one
 
-            next_leg.move_from_time_pos_vel_accel(time_to_destination * 0.5, turn_pos, turn_vel, turn_accel, true);
+            [turn_pos, turn_vel, turn_accel] = this.move_from_time_pos_vel_accel(this.get_time_elapsed() + time_to_destination * 0.5, turn_pos, turn_vel, turn_accel, false); // don't log here as we are computing the turn point needed for the next leg, not this one
+            [turn_pos, turn_vel, turn_accel] = next_leg.move_from_time_pos_vel_accel(time_to_destination * 0.5, turn_pos, turn_vel, turn_accel, true);
+
             const speed_min = Math.min(this.get_speed_along_track(), next_leg.get_speed_along_track());
-            if ((this.get_time_remaining() < next_leg.time_end() * 0.5) && (turn_pos.length() < wp_radius) &&
+            if ((this.get_time_remaining() < next_leg.time_end() * 0.5) && // the time remaining is less than half of the next leg
+                (turn_pos.length() < wp_radius) && 
                 (new Vector(turn_vel.x, turn_vel.y, 0.0).length() < speed_min) &&
                 (new Vector(turn_accel.x, turn_accel.y, 0.0).length() < accel_corner))
                 {
-                next_leg.move_from_pos_vel_accel(dt, target_pos, target_vel, target_accel);
+                    [target_pos, target_vel, target_accel] = next_leg.move_from_pos_vel_accel(dt, target_pos, target_vel, target_accel);
             }
 
         } else if (!is_zero(next_leg.get_time_elapsed())) {
@@ -1223,6 +1225,12 @@ class WPNav {
 
         // use previous destination as origin
         this.origin = this.destination.copy();
+
+        this.scurve_prev_leg = this.scurve_this_leg;
+
+        // ensure we release the current curve reference to point it at a new scurve
+        this.scurve_this_leg = new SCurve();
+        this.scurve_this_leg.init(this.wp_number+1);
 
         // In AP there is a buch of conversions and cases depending on alt frame and whether spline wp or not.
         // That stuff drops out in this simplified version.
