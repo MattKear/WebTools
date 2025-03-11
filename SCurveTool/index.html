@@ -45,17 +45,17 @@
         </legend>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="first_wp_y" value="0" min="-100" step="5" max="100" style="width: 50px" onchange="update()">
-          <label for="first_wp_y">North (m)</label>
+          <input type="number" id="first_wp_x" value="0" min="-300" step="10" max="300" style="width: 50px" onchange="update()">
+          <label for="first_wp_x">North (m)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="first_wp_x" value="0" min="-100" step="5" max="100" style="width: 50px" onchange="update()">
-          <label for="first_wp_x">East (m)</label>
+          <input type="number" id="first_wp_y" value="0" min="-300" step="10" max="300" style="width: 50px" onchange="update()">
+          <label for="first_wp_y">East (m)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="first_wp_z" value="60" min="0" step="5" max="100" style="width: 50px" onchange="update()">
+          <input type="number" id="first_wp_z" value="300" min="0" step="10" max="300" style="width: 50px" onchange="update()">
           <label for="first_wp_z">Up (m)</label>
         </p>
       </fieldset>
@@ -70,17 +70,17 @@
         </legend>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="curr_wp_y" value="300" min="-100" step="5" max="1000" style="width: 50px" onchange="update()">
-          <label for="curr_wp_y">North (m)</label>
+          <input type="number" id="curr_wp_x" value="300" min="-300" step="10" max="300" style="width: 50px" onchange="update()">
+          <label for="curr_wp_x">North (m)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="curr_wp_x" value="200" min="-100" step="5" max="1000" style="width: 50px" onchange="update()">
-          <label for="curr_wp_x">East (m)</label>
+          <input type="number" id="curr_wp_y" value="300" min="-300" step="10" max="300" style="width: 50px" onchange="update()">
+          <label for="curr_wp_y">East (m)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="curr_wp_z" value="50" min="0" step="5" max="1000" style="width: 50px" onchange="update()">
+          <input type="number" id="curr_wp_z" value="150" min="0" step="10" max="300" style="width: 50px" onchange="update()">
           <label for="curr_wp_z">Up (m)</label>
         </p>
       </fieldset>
@@ -95,17 +95,17 @@
         </legend>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="next_wp_y" value="70" min="-100" step="5" max="100" style="width: 50px" onchange="update()">
-          <label for="next_wp_y">North (m)</label>
+          <input type="number" id="next_wp_x" value="70" min="-300" step="10" max="300" style="width: 50px" onchange="update()">
+          <label for="next_wp_x">North (m)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="next_wp_x" value="35" min="-100" step="5" max="100" style="width: 50px" onchange="update()">
-          <label for="next_wp_x">East (m)</label>
+          <input type="number" id="next_wp_y" value="35" min="-300" step="10" max="300" style="width: 50px" onchange="update()">
+          <label for="next_wp_y">East (m)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="next_wp_z" value="40" min="0" step="5" max="100" style="width: 50px" onchange="update()">
+          <input type="number" id="next_wp_z" value="80" min="0" step="10" max="300" style="width: 50px" onchange="update()">
           <label for="next_wp_z">Up (m)</label>
         </p>
       </fieldset>
@@ -120,17 +120,17 @@
         </legend>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="last_wp_y" value="100" min="-100" step="5" max="100" style="width: 50px" onchange="update()">
-          <label for="last_wp_y">North (m)</label>
+          <input type="number" id="last_wp_x" value="100" min="-300" step="10" max="300" style="width: 50px" onchange="update()">
+          <label for="last_wp_x">North (m)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="last_wp_x" value="20" min="-100" step="5" max="100" style="width: 50px" onchange="update()">
-          <label for="last_wp_x">East (m)</label>
+          <input type="number" id="last_wp_y" value="250" min="-300" step="10" max="300" style="width: 50px" onchange="update()">
+          <label for="last_wp_y">East (m)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="last_wp_z" value="30" min="0" step="5" max="100" style="width: 50px" onchange="update()">
+          <input type="number" id="last_wp_z" value="80" min="0" step="10" max="300" style="width: 50px" onchange="update()">
           <label for="last_wp_z">Up (m)</label>
         </p>
       </fieldset>
@@ -244,7 +244,7 @@
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="wpnav_radius" value="200" min="5" step="50" max="1000" style="width: 50px" onchange="update()">
+          <input type="number" id="wpnav_radius" value="5000" min="5" step="50" max="1000" style="width: 50px" onchange="update()">
           <label for="wpnav_radius">WPNAV_RADIUS (cm)</label>
         </p>
 
