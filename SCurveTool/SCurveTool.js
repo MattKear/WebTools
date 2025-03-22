@@ -854,10 +854,10 @@ class SCurve {
     // target_pos should be set to this segment's origin and it will be updated to the current position target
     // target_vel and target_accel are updated with new targets
     // returns true if vehicle has passed the apex of the corner
-    advance_target_along_track(prev_leg, next_leg, wp_radius, accel_corner, fast_waypoint, dt, target_pos, target_vel, target_accel)
+    advance_target_along_track(prev_leg, next_leg, wp_radius, accel_corner, fast_waypoint, dt, target_pos, target_vel, target_accel, target_jerk)
     {
-        [target_pos, target_vel, target_accel] = prev_leg.move_to_pos_vel_accel(dt, target_pos, target_vel, target_accel);
-        [target_pos, target_vel, target_accel] = this.move_from_pos_vel_accel(dt, target_pos, target_vel, target_accel);
+        [target_pos, target_vel, target_accel, target_jerk] = prev_leg.move_to_pos_vel_accel(dt, target_pos, target_vel, target_accel, target_jerk);
+        [target_pos, target_vel, target_accel, target_jerk] = this.move_from_pos_vel_accel(dt, target_pos, target_vel, target_accel, target_jerk);
         let s_finished = this.finished();
 
         // check for change of leg on fast waypoint
@@ -874,8 +874,8 @@ class SCurve {
             let turn_accel = new Vector();
             //let time_test = this.get_time_elapsed() + time_to_destination * 0.5;
 
-            [turn_pos, turn_vel, turn_accel] = this.move_from_time_pos_vel_accel(this.get_time_elapsed() + time_to_destination * 0.5, turn_pos, turn_vel, turn_accel, false); // don't log here as we are computing the turn point needed for the next leg, not this one
-            [turn_pos, turn_vel, turn_accel] = next_leg.move_from_time_pos_vel_accel(time_to_destination * 0.5, turn_pos, turn_vel, turn_accel, true);
+            [turn_pos, turn_vel, turn_accel, ] = this.move_from_time_pos_vel_accel(this.get_time_elapsed() + time_to_destination * 0.5, turn_pos, turn_vel, turn_accel, new Vector(), false); // don't log here as we are computing the turn point needed for the next leg, not this one
+            [turn_pos, turn_vel, turn_accel, ] = next_leg.move_from_time_pos_vel_accel(time_to_destination * 0.5, turn_pos, turn_vel, turn_accel, new Vector(), true);
 
             const speed_min = Math.min(this.get_speed_along_track(), next_leg.get_speed_along_track());
             if ((this.get_time_remaining() < next_leg.time_end() * 0.5) && // the time remaining is less than half of the next leg
@@ -883,21 +883,21 @@ class SCurve {
                 (new Vector(turn_vel.x, turn_vel.y, 0.0).length() < speed_min) &&
                 (new Vector(turn_accel.x, turn_accel.y, 0.0).length() < accel_corner))
                 {
-                    [target_pos, target_vel, target_accel] = next_leg.move_from_pos_vel_accel(dt, target_pos, target_vel, target_accel);
+                    [target_pos, target_vel, target_accel, target_jerk] = next_leg.move_from_pos_vel_accel(dt, target_pos, target_vel, target_accel, target_jerk);
             }
 
         } else if (!is_zero(next_leg.get_time_elapsed())) {
-            [target_pos, target_vel, target_accel] = next_leg.move_from_pos_vel_accel(dt, target_pos, target_vel, target_accel);
+            [target_pos, target_vel, target_accel, target_jerk] = next_leg.move_from_pos_vel_accel(dt, target_pos, target_vel, target_accel, target_jerk);
             if (next_leg.get_time_elapsed() >= this.get_time_remaining()) {
                 s_finished = true;
             }
         }
 
-        return [s_finished, prev_leg, next_leg, target_pos, target_vel, target_accel];
+        return [s_finished, prev_leg, next_leg, target_pos, target_vel, target_accel, target_jerk];
     }
 
     // increment time pointer and return the position, velocity and acceleration vectors relative to the destination
-    move_to_pos_vel_accel(dt, pos, vel, accel)
+    move_to_pos_vel_accel(dt, pos, vel, accel, jerk)
     {
         if (!(pos instanceof Vector) || !(vel instanceof Vector) || !(accel instanceof Vector)) {
             throw new Error("pos/vel/accel must be Vectors")
@@ -910,6 +910,7 @@ class SCurve {
         pos = pos.add(this.delta_unit.scaler_multiply(scurve_P1));
         vel = vel.add(this.delta_unit.scaler_multiply(scurve_V1));
         accel = accel.add(this.delta_unit.scaler_multiply(scurve_A1));
+        jerk = accel.add(this.delta_unit.scaler_multiply(scurve_J1));
         this.position_sq = scurve_P1**2;
 
         // update logging
@@ -924,11 +925,11 @@ class SCurve {
         // change from relative to destination
         pos = pos.subtract(this.track);
 
-        return [pos, vel, accel]
+        return [pos, vel, accel, jerk]
     }
 
     // increment time pointer and return the position, velocity and acceleration vectors relative to the origin
-    move_from_pos_vel_accel(dt, pos, vel, accel)
+    move_from_pos_vel_accel(dt, pos, vel, accel, jerk)
     {
         if (!(pos instanceof Vector) || !(vel instanceof Vector) || !(accel instanceof Vector)) {
             throw new Error("pos/vel/accel must be Vectors")
@@ -941,6 +942,7 @@ class SCurve {
         pos = pos.add(this.delta_unit.scaler_multiply(scurve_P1));
         vel = vel.add(this.delta_unit.scaler_multiply(scurve_V1));
         accel = accel.add(this.delta_unit.scaler_multiply(scurve_A1));
+        jerk = jerk.add(this.delta_unit.scaler_multiply(scurve_J1));
         this.position_sq = scurve_P1**2;
 
         // update logging
@@ -952,14 +954,14 @@ class SCurve {
         this.logger.jerk.push(scurve_J1*0.01);
         this.logger.snap.push(this.St*0.01);
 
-        return [pos, vel, accel];
+        return [pos, vel, accel, jerk];
     }
 
     // return the position, velocity and acceleration vectors relative to the origin at a specified time along the path
-    move_from_time_pos_vel_accel(time_now, pos, vel, accel, log)
+    move_from_time_pos_vel_accel(time_now, pos, vel, accel, jerk, log)
     {
         if (!(pos instanceof Vector) || !(vel instanceof Vector) || !(accel instanceof Vector)) {
-            throw new Error("pos/vel/accel must be Vectors")
+            throw new Error("pos/vel/accel must be Vectors");
         }
 
         let [scurve_J1, scurve_A1, scurve_V1, scurve_P1] = this.get_jerk_accel_vel_pos_at_time(time_now);
@@ -967,6 +969,7 @@ class SCurve {
         pos = pos.add(this.delta_unit.scaler_multiply(scurve_P1));
         vel = vel.add(this.delta_unit.scaler_multiply(scurve_V1));
         accel = accel.add(this.delta_unit.scaler_multiply(scurve_A1));
+        jerk = jerk.add(this.delta_unit.scaler_multiply(scurve_J1));
 
         // update logging
         if (log) {
@@ -978,7 +981,7 @@ class SCurve {
             this.logger.jerk.push(scurve_J1*0.01);
             this.logger.snap.push(this.St*0.01);
         }
-        return [pos, vel, accel];
+        return [pos, vel, accel, jerk];
     }
 
     // Calculate the snap at given time.  This is not used in AP, but used here to plot the
@@ -1396,12 +1399,13 @@ class WPNav {
         let target_pos = new Vector();
         let target_vel = new Vector();
         let target_accel = new Vector();
+        let target_jerk = new Vector();
 
         let s_finished = false;
 
         // update target position, velocity and acceleration
         target_pos = this.origin.copy();
-        [s_finished, this.scurve_prev_leg, this.scurve_next_leg, target_pos, target_vel, target_accel] = this.scurve_this_leg.advance_target_along_track(this.scurve_prev_leg, this.scurve_next_leg, this.wp_radius_cm, this.scurve_accel_corner, this.flags.fast_waypoint, this.track_scalar_dt * dt, target_pos, target_vel, target_accel);
+        [s_finished, this.scurve_prev_leg, this.scurve_next_leg, target_pos, target_vel, target_accel, target_jerk] = this.scurve_this_leg.advance_target_along_track(this.scurve_prev_leg, this.scurve_next_leg, this.wp_radius_cm, this.scurve_accel_corner, this.flags.fast_waypoint, this.track_scalar_dt * dt, target_pos, target_vel, target_accel, target_jerk);
 
         // We are just moving through targets in this tool, so our "current position" is just the current target
         let curr_pos = target_pos.copy();
@@ -1423,7 +1427,7 @@ class WPNav {
         }
 
         // successfully advanced along track
-        return [target_pos, target_vel, target_accel];
+        return [target_pos, target_vel, target_accel, target_jerk];
     }
 
     set_wp_destination_loc (destination) {
@@ -1727,18 +1731,20 @@ function update()
     let pos_targ = [];
     let vel_targ = [];
     let accel_targ = [];
+    let jerk_targ = [];
     let mission_leg_track = [];
     let last_sc_point = 0;
     let time = [];
     let wp_index = 2;
     for (let i = 0; i < n_steps; i++) {
-        let [pos_cm, vel_cms, accel_cms] = wp_nav.advance_wp_target_along_track(dt)
+        let [pos_cm, vel_cms, accel_cmss, jerk_cmsss] = wp_nav.advance_wp_target_along_track(dt)
 
         // logging 3D kinematics to add to the 3D plot
         t += dt;
         pos_targ.push(pos_cm.scaler_multiply(0.01));         // (m)
         vel_targ.push(vel_cms.scaler_multiply(0.01));        // (m/s)
-        accel_targ.push(accel_cms.scaler_multiply(0.01));      // (m/s/s)
+        accel_targ.push(accel_cmss.scaler_multiply(0.01));   // (m/s/s)
+        jerk_targ.push(jerk_cmsss.scaler_multiply(0.01));    // (m/s/s/s)
         mission_leg_track.push(wp_index - 1);
         time.push(t);
 
@@ -1785,13 +1791,19 @@ function update()
     // colour the line based on velocity magnitude
     const vel_cb = document.getElementById("display_wp_vel");
     const accel_cb = document.getElementById("display_wp_accel");
-    // const jerk_cb = document.getElementById("display_wp_jerk");
-    if (accel_cb.checked) {
+    const jerk_cb = document.getElementById("display_wp_jerk");
+    if (jerk_cb.checked) {
+        wp_pos_plot.data[1].line.color = jerk_targ.map(v => v.length());
+        wp_pos_plot.data[1].line.colorbar.title = "Jerk Magnitude";
+        wp_pos_plot.data[1].hovertemplate = "<extra></extra>N = %{y:.0f} m<br>E = %{x:.0f} m<br>U = %{z:.0f} m<br>Jerk = %{line.color:.2f} m/s";
+    } else if (accel_cb.checked) {
         wp_pos_plot.data[1].line.color = accel_targ.map(v => v.length());
         wp_pos_plot.data[1].line.colorbar.title = "Accel Magnitude";
+        wp_pos_plot.data[1].hovertemplate = "<extra></extra>N = %{y:.0f} m<br>E = %{x:.0f} m<br>U = %{z:.0f} m<br>Accel = %{line.color:.2f} m/s";
     } else if (vel_cb.checked) {
         wp_pos_plot.data[1].line.color = vel_targ.map(v => v.length());
         wp_pos_plot.data[1].line.colorbar.title = "Vel Magnitude";
+        wp_pos_plot.data[1].hovertemplate = "<extra></extra>N = %{y:.0f} m<br>E = %{x:.0f} m<br>U = %{z:.0f} m<br>Vel = %{line.color:.2f} m/s";
     } else {
         wp_pos_plot.data[1].line.color = "rgba(0, 0, 0, 1)";
         wp_pos_plot.data[1].line.showscale = false;
