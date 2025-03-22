@@ -67,6 +67,12 @@ function initial_load()
     });
 
     setup_kinematic_plots();
+
+    // set starting state for display checkboxes
+    document.getElementById("display_wp_radius").checked = true;
+    document.getElementById("display_wp_vel").checked = true;
+    document.getElementById("display_wp_accel").checked = false;
+    document.getElementById("display_wp_jerk").checked = false;
 }
 
 function setup_kinematic_plots() {
@@ -161,9 +167,9 @@ function setup_kinematic_plots() {
         }]
     }
 
-    plot = document.getElementById("pos_plot")
-    Plotly.purge(plot)
-    Plotly.newPlot(plot, pos_plot.data, pos_plot.layout, { displaylogo: false })
+    plot = document.getElementById("pos_plot");
+    Plotly.purge(plot);
+    Plotly.newPlot(plot, pos_plot.data, pos_plot.layout, { displaylogo: false });
 
 
     // Link all time axis
@@ -173,7 +179,7 @@ function setup_kinematic_plots() {
         ["accel_plot", "x", "", accel_plot],
         ["vel_plot", "x", "", vel_plot],
         ["pos_plot", "x", "", pos_plot],
-    ])
+    ]);
 
     // // Link plot reset
     link_plot_reset([
@@ -182,7 +188,38 @@ function setup_kinematic_plots() {
         ["accel_plot", accel_plot],
         ["vel_plot", vel_plot],
         ["pos_plot", pos_plot],
-    ])
+    ]);
+}
+
+
+const Last_Update = Object.freeze({
+    VEL: 0,
+    ACCEL: 1,
+    JERK: 2
+});
+
+function update_wp_colours(last_set) {
+    const vel_cb = document.getElementById("display_wp_vel");
+    const accel_cb = document.getElementById("display_wp_accel");
+    const jerk_cb = document.getElementById("display_wp_jerk");
+    switch (last_set) {
+        case Last_Update.VEL:
+            accel_cb.checked = false;
+            jerk_cb.checked = false;
+            break;
+
+        case Last_Update.ACCEL:
+            vel_cb.checked = false;
+            jerk_cb.checked = false;
+            break;
+
+        case Last_Update.JERK:
+            vel_cb.checked = false;
+            accel_cb.checked = false;
+            break;
+    }
+
+    update();
 }
 
 // flor plotting 3D spheres around the waypoints to show the effect of WPNAV_RADIUS param
@@ -221,7 +258,8 @@ function generate_plotly_sphere(center, radius, steps) {
         i: i, j: j, k: k,
         opacity: 0.3, // Transparency
         color: "rgba(255, 0, 0, 0.5)",
-        flatshading: true
+        flatshading: true,
+        hovertemplate: "nothing"
     };
 }
 
@@ -1688,17 +1726,19 @@ function update()
     const n_steps = Math.floor(T/dt);
     let pos_targ = [];
     let vel_targ = [];
+    let accel_targ = [];
     let mission_leg_track = [];
     let last_sc_point = 0;
     let time = [];
     let wp_index = 2;
     for (let i = 0; i < n_steps; i++) {
-        let [pos_cm, vel_cms, _] = wp_nav.advance_wp_target_along_track(dt)
+        let [pos_cm, vel_cms, accel_cms] = wp_nav.advance_wp_target_along_track(dt)
 
         // logging 3D kinematics to add to the 3D plot
         t += dt;
         pos_targ.push(pos_cm.scaler_multiply(0.01));         // (m)
         vel_targ.push(vel_cms.scaler_multiply(0.01));        // (m/s)
+        accel_targ.push(accel_cms.scaler_multiply(0.01));      // (m/s/s)
         mission_leg_track.push(wp_index - 1);
         time.push(t);
 
@@ -1743,7 +1783,19 @@ function update()
     wp_pos_plot.data[1].z = pos_targ.map(v => v.z);
     wp_pos_plot.data[1].missionLeg = mission_leg_track;
     // colour the line based on velocity magnitude
-    wp_pos_plot.data[1].line.color = vel_targ.map(v => v.length());
+    const vel_cb = document.getElementById("display_wp_vel");
+    const accel_cb = document.getElementById("display_wp_accel");
+    // const jerk_cb = document.getElementById("display_wp_jerk");
+    if (accel_cb.checked) {
+        wp_pos_plot.data[1].line.color = accel_targ.map(v => v.length());
+        wp_pos_plot.data[1].line.colorbar.title = "Accel Magnitude";
+    } else if (vel_cb.checked) {
+        wp_pos_plot.data[1].line.color = vel_targ.map(v => v.length());
+        wp_pos_plot.data[1].line.colorbar.title = "Vel Magnitude";
+    } else {
+        wp_pos_plot.data[1].line.color = "rgba(0, 0, 0, 1)";
+        wp_pos_plot.data[1].line.showscale = false;
+    }
 
     const wp_display_cb = document.getElementById("display_wp_radius");
     if (wp_display_cb.checked) {

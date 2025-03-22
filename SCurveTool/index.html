@@ -53,6 +53,12 @@
 
   .label {
     width: 60px;
+    height: 15px;
+  }
+
+  .checkOption {
+    width: 15px;
+    height: 15px;
   }
 </style>
 
@@ -168,7 +174,7 @@
         </fieldset>
       </td>
 
-      <td>
+      <!-- <td>
         <fieldset class="position">
           <legend>Display
               <img id="TT" src="../images/question-circle.svg" style="width: 1em; vertical-align: bottom" 
@@ -182,7 +188,7 @@
           </p>
 
         </fieldset>
-      </td>
+      </td> -->
 
     </tr>
   </table>
@@ -329,6 +335,39 @@
     </tr>
   </table>
 </fieldset>
+
+
+
+<fieldset class="outter">
+  <legend>Display Options
+      <img id="TT" src="../images/question-circle.svg" style="width: 1em; vertical-align: bottom" 
+      data-tippy-content='Options for different ways to visualise the kinematic trajectories',
+      data-tippy-maxWidth='750px'/>
+  </legend>
+
+  <p style="margin-top:5px; margin-bottom:5px;">
+    <input type="checkbox" id="display_wp_radius" class="checkOption" onchange="update()">
+    <label for="display_wp_radius">Display wp radius</label>
+  </p>
+
+  <p style="margin-top:5px; margin-bottom:5px;">
+    <input type="checkbox" id="display_wp_vel" class="checkOption" onchange="update_wp_colours(0)">
+    <label for="display_wp_vel">Colour WP plot by velocity</label>
+  </p>
+
+  <p style="margin-top:5px; margin-bottom:5px;">
+    <input type="checkbox" id="display_wp_accel" class="checkOption" onchange="update_wp_colours(1)">
+    <label for="display_wp_accel">Colour WP plot by Acceleration</label>
+  </p>
+
+  <p style="margin-top:5px; margin-bottom:5px;">
+    <input type="checkbox" id="display_wp_jerk" class="checkOption" onchange="update_wp_colours(2)">
+    <label for="display_wp_jerk">Colour WP plot by Jerk</label>
+  </p>
+
+</fieldset>
+
+
 
 
 <!-- <table>
