@@ -283,6 +283,15 @@ function get_range(data) {
             max_val = Math.max(max_val, max_v);
         }
     }
+
+    // If the wp radius has not been displayed, add it on anyway, to stop the plot axis from jumping around when switching the sphere on and off
+    const wp_rad_displayed = document.getElementById("display_wp_radius");
+    if (!wp_rad_displayed.checked) {
+        const wp_rad = parseFloat(document.getElementById("wpnav_radius").value);
+        min_val = min_val - wp_rad * 0.01;
+        max_val = max_val + wp_rad * 0.01;
+    }
+
     return [min_val, max_val];
 }
 
