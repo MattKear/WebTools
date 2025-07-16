@@ -11,11 +11,12 @@ function initial_load()
     let plot;
 
     // Jerk
-    jerk_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s³" },
+    jerk_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                      { x:[], y:[], name: 'Flare End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                       { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s³" }]
 
     jerk_plot.layout = {
-        legend: { itemclick: false, itemdoubleclick: false, x: 0.8 },
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.9 },
         margin: { b: 50, l: 60, r: 50, t: 20 },
         xaxis: { title: {text: time_scale_label } },
         yaxis: { title: {text: "Jerk (m/s³)" } }
@@ -26,11 +27,12 @@ function initial_load()
     Plotly.newPlot(plot, jerk_plot.data, jerk_plot.layout, { displaylogo: false })
 
     // Acceleration
-    accel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" },
+    accel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                       { x:[], y:[], name: 'Flare End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                        { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" }]
 
     accel_plot.layout = {
-        legend: { itemclick: false, itemdoubleclick: false, x: 0.8 },
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.9 },
         margin: { b: 50, l: 60, r: 50, t: 20 },
         xaxis: { title: {text: time_scale_label } },
         yaxis: { title: {text: "Acceleration (m/s²)" } }
@@ -41,11 +43,12 @@ function initial_load()
     Plotly.newPlot(plot, accel_plot.data, accel_plot.layout, { displaylogo: false });
 
     // velocity
-    vel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s" },
+    vel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                     { x:[], y:[], name: 'Flare End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                      { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s" }];
 
     vel_plot.layout = {
-        legend: { itemclick: false, itemdoubleclick: false, x: 0.8 },
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.9, y: 0.3 },
         margin: { b: 50, l: 60, r: 50, t: 20 },
         xaxis: { title: {text: time_scale_label } },
         yaxis: { title: {text: "Velocity (m/s)" } },
@@ -64,9 +67,10 @@ function initial_load()
     Plotly.newPlot(plot, vel_plot.data, vel_plot.layout, { displaylogo: false })
 
     // position
-    pos_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" },
+    pos_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                     { x:[], y:[], name: 'Flare End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                      { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" },
-                    { x:[], y:[], name: 'Look Forward', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" }]
+                     { x:[], y:[], name: 'Projected Flare Exit', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" }]
 
     pos_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false, x: 0.8},
@@ -89,20 +93,20 @@ function initial_load()
 
 
     // Link all time axis
-    // link_plot_axis_range([
-    //     ["jerk_plot", "x", "", jerk_plot],
-    //     ["accel_plot", "x", "", accel_plot],
-    //     ["vel_plot", "x", "", vel_plot],
-    //     ["pos_plot", "x", "", pos_plot],
-    // ])
+    link_plot_axis_range([
+        ["jerk_plot", "x", "", jerk_plot],
+        ["accel_plot", "x", "", accel_plot],
+        ["vel_plot", "x", "", vel_plot],
+        ["pos_plot", "x", "", pos_plot],
+    ])
 
     // Link plot reset
-    // link_plot_reset([
-    //     ["jerk_plot", jerk_plot],
-    //     ["accel_plot", accel_plot],
-    //     ["vel_plot", vel_plot],
-    //     ["pos_plot", pos_plot],
-    // ])
+    link_plot_reset([
+        ["jerk_plot", jerk_plot],
+        ["accel_plot", accel_plot],
+        ["vel_plot", vel_plot],
+        ["pos_plot", pos_plot],
+    ])
 }
 
 function update_mode(params)
@@ -297,24 +301,11 @@ function run_flare()
     const P2 = parseFloat(document.getElementById("final_pos").value);
 
     const Jm = parseFloat(document.getElementById("max_jerk").value);
-    // const T = parseFloat(document.getElementById("flare_time").value);
-    // const AZm = parseFloat(document.getElementById("max_vert_accel").value);
 
     const density = 1.225; // (kg/m^3)
     const gravity = -9.81; // (m/s/s)
     const rotor_area = M_PI * rotor_rad * rotor_rad; // (m^2)
     const rotor_drag = 0.5 * density * rotor_area * rotor_cd // (kg/s)
-
-
-
-    // console.log(`Inputs:\njm = ${Jm}\na0 = ${A0}\na2 = ${A2}\nv0 = ${V0}\nv2 = ${V2}`)
-
-    // "smart" method
-    // variable time periods to compute the necessary trajectory
-    // const [tj1, tj2] = compute_time_split(Jm, A0, A2, V0, V2)
-    // const total_time = (tj1+tj2)*2.0
-    // console.log(`Calculated Time Splits:\nT1 = ${tj1*2.0},\nT2 = ${tj2*2.0},\nTotal T = ${total_time}`)
-
 
     // init a time vector
     const dt = 0.01 // (s)
@@ -329,6 +320,7 @@ function run_flare()
 
     let in_flare = false;
     let flare_finished = false;
+    let flare_finished_time = 0;
     let flare_init = {t:0.0, a:0.0, v:0.0, p:0.0};
     let tj1, tj2;
 
@@ -372,9 +364,13 @@ function run_flare()
             // Add values to keep array length correct
             P_end_hist.push(P2);
 
-            flare_finished = t >= flare_init.t + (tj1 + tj2) * 2.0
-        } else {
+            // Keep the flare exit time up to date
+            flare_finished_time = t;
 
+            // Check if we meet the exit conditions for the flare
+            flare_finished = t >= flare_init.t + (tj1 + tj2) * 2.0
+
+        } else {
             // Assume constant accel at exit condition (not updating accel and jerk)
             const initial_V = Vt;
             Vt = initial_V + At * dt;
@@ -397,44 +393,46 @@ function run_flare()
         t += dt; 
     }
 
-    console.log(P_end_hist)
-
-    // // dumb original method
-    // var traj = new Trajectory();
-    // for (var i = 0; i < t.length; i++) {
-    //     // calculate the variables for the trajectory
-    //     const [Jt, At, Vt, Pt] = arot_s_curve(t[i], T, Jm, A0, V0, P0, A2);
-    //     traj.j.push(Jt);
-    //     traj.a.push(At);
-    //     traj.v.push(Vt);
-    //     traj.p.push(Pt);
-    // }
-
     // Update plots
-    jerk_plot.data[0].x = [flare_init.t, flare_init.t]
-    jerk_plot.data[0].y = [Math.min(...calcd_traj.j), Math.max(...calcd_traj.j)]
-    jerk_plot.data[1].x = time
-    jerk_plot.data[1].y = calcd_traj.j
+    const flare_start_time = [flare_init.t, flare_init.t];
+    const flare_end_time = [flare_finished_time, flare_finished_time];
+
+    const j_min_max = [Math.min(...calcd_traj.j), Math.max(...calcd_traj.j)]
+    jerk_plot.data[0].x = flare_start_time;
+    jerk_plot.data[0].y = j_min_max;
+    jerk_plot.data[1].x = flare_end_time;
+    jerk_plot.data[1].y = j_min_max;
+    jerk_plot.data[2].x = time
+    jerk_plot.data[2].y = calcd_traj.j
     Plotly.redraw("jerk_plot")
 
-    accel_plot.data[0].x = [flare_init.t, flare_init.t]
-    accel_plot.data[0].y = [Math.min(...calcd_traj.a), Math.max(...calcd_traj.a)]
-    accel_plot.data[1].x = time
-    accel_plot.data[1].y = calcd_traj.a
+    const a_min_max = [Math.min(...calcd_traj.a), Math.max(...calcd_traj.a)]
+    accel_plot.data[0].x = flare_start_time
+    accel_plot.data[0].y = a_min_max
+    accel_plot.data[1].x = flare_end_time
+    accel_plot.data[1].y = a_min_max
+    accel_plot.data[2].x = time
+    accel_plot.data[2].y = calcd_traj.a
     Plotly.redraw("accel_plot")
 
-    vel_plot.data[0].x = [flare_init.t, flare_init.t]
-    vel_plot.data[0].y = [Math.min(...calcd_traj.v), Math.max(...calcd_traj.v)]
-    vel_plot.data[1].x = time
-    vel_plot.data[1].y = calcd_traj.v
+    const v_min_max = [Math.min(...calcd_traj.v), Math.max(...calcd_traj.v)]
+    vel_plot.data[0].x = flare_start_time
+    vel_plot.data[0].y = v_min_max
+    vel_plot.data[1].x = flare_end_time
+    vel_plot.data[1].y = v_min_max
+    vel_plot.data[2].x = time
+    vel_plot.data[2].y = calcd_traj.v
     Plotly.redraw("vel_plot")
 
-    pos_plot.data[0].x = [flare_init.t, flare_init.t]
-    pos_plot.data[0].y = [Math.min(...calcd_traj.p), Math.max(...calcd_traj.p)]
-    pos_plot.data[1].x = time
-    pos_plot.data[1].y = calcd_traj.p
+    const p_min_max = [Math.min(...calcd_traj.p), Math.max(...calcd_traj.p)]
+    pos_plot.data[0].x = flare_start_time
+    pos_plot.data[0].y = p_min_max
+    pos_plot.data[1].x = flare_end_time
+    pos_plot.data[1].y = p_min_max
     pos_plot.data[2].x = time
-    pos_plot.data[2].y = P_end_hist
+    pos_plot.data[2].y = calcd_traj.p
+    pos_plot.data[3].x = time
+    pos_plot.data[3].y = P_end_hist
     Plotly.redraw("pos_plot")
 
 }
