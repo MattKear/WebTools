@@ -248,6 +248,37 @@ function arot_calculated_s_curve(time_now, tj1, tj2, A0, V0, P0, Jm)
     return calc_javp_for_segment_incr_jerk(t2, tj2, -Jm, A1, V1, P1);
 }
 
+// special handling function to adapt the enumbent s-curve maths to fit the trajectory of the autorotation
+function arot_calculated_3phase_s_curve(time_now, tj1, tj23, A0, V0, P0, Jm1, Jm23)
+{
+    const T1 = tj1 * 2.0;
+    const T2 = tj23 * 2.0;
+    let A1, V1, P1;
+    let A2, V2, P2;
+
+    // handle the positive jerk (increasing accel in the first half of the flare time)
+    if (time_now <= T1) {
+        // Phase 1
+        return calc_javp_for_segment_incr_jerk(time_now, tj1, Jm1, A0, V0, P0);
+
+    } else if (time_now <= (T1 + T2)) {
+        // Phase 2
+        const t = time_now - T1;
+        // Calc initial conditions for phase 2
+        [ , A1, V1, P1] = calc_javp_for_segment_incr_jerk(T1, tj1, Jm1, A0, V0, P0);
+        // Calc phase 2 trajectory
+        return calc_javp_for_segment_incr_jerk(t, tj23, Jm23, A1, V1, P1);
+    }
+
+    // if we got this far then we are doing the negative jerk portion of the trajectory (phase 3)
+    // first we need to calculate the initial conditions of the negative trajectory, these are the exit conditions of the 2nd positive jerk trajectory
+    [ , A1, V1, P1] = calc_javp_for_segment_incr_jerk(T1, tj1, Jm1, A0, V0, P0);
+    [ , A2, V2, P2] = calc_javp_for_segment_incr_jerk(T2, tj23, Jm23, A1, V1, P1);
+    const t = time_now - T1 - T2;
+
+    return calc_javp_for_segment_incr_jerk(t, tj23, -Jm23, A2, V2, P2);
+}
+
 // Calculate the jerk, acceleration, velocity and position at time time_now when running the increasing jerk magnitude time segment based on a raised cosine profile
 function calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0)
 {
@@ -271,6 +302,24 @@ function compute_time_split(jm, a0, a2, v0, v2)
     const tj2 = (- a2 + safe_sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)))) / jm
     return [tj1, tj2]
 }
+
+function compute_trajectory_times(jm, am, a0, v0, v3)
+{
+    // Calculate first phase time period to achieve zero acceleration
+    tj1 = -a0/jm;
+
+    // Calculate v1 at the exit of the first phase
+    [ , , v1, ] = calc_javp_for_segment_incr_jerk(2.0 * tj1, tj1, jm, a0, v0, 0.0);
+
+    // Calculate jm2,3
+    jm23 = (2.0 * am * am) / (v3 - v1);
+
+    // Calculate 2nd and 3rd time periods
+    tj23 = am / jm23;
+
+    return [tj1, tj23, jm23];
+}
+
 
 
 class Trajectory
@@ -301,6 +350,7 @@ function run_flare()
     const P2 = parseFloat(document.getElementById("final_pos").value);
 
     const Jm = parseFloat(document.getElementById("max_jerk").value);
+    const Am = parseFloat(document.getElementById("max_vert_accel").value);
 
     const density = 1.225; // (kg/m^3)
     const gravity = -9.81; // (m/s/s)
@@ -322,9 +372,14 @@ function run_flare()
     let flare_finished = false;
     let flare_finished_time = 0;
     let flare_init = {t:0.0, a:0.0, v:0.0, p:0.0};
-    let tj1, tj2;
+    let tj1, tj2, tj3;
+    let jm23 = 0;
 
     let P_end_hist = [];
+
+    const TWO_PHASE_METHOD = 0;
+    const THREE_PHASE_METHOD = 1;
+    const method = THREE_PHASE_METHOD;
 
     // Run simulation
     while (t < 100.0) {
@@ -343,12 +398,21 @@ function run_flare()
             Vt = initial_V + At * dt;
             Pt += initial_V * dt + 0.5 * At * dt * dt;
 
+            let P_end;
+            if (method == TWO_PHASE_METHOD) {
+                // Calculate the s-curve trajectory look forward position
+                [tj1, tj2] = compute_time_split(Jm, At, A2, Vt, V2)
+                const T_end = (tj1 + tj2) * 2.0;
+                [, , , P_end] = arot_calculated_s_curve(T_end, tj1, tj2, At, Vt, Pt, Jm);
+                P_end_hist.push(P_end);
 
-            // Calculate the s-curve trajectory look forward position
-            [tj1, tj2] = compute_time_split(Jm, At, A2, Vt, V2)
-            const T_end = (tj1 + tj2) * 2.0;
-            const [, , , P_end] = arot_calculated_s_curve(T_end, tj1, tj2, At, Vt, Pt, Jm);
-            P_end_hist.push(P_end);
+            } else {
+                [tj1, tj2, jm23] = compute_trajectory_times(Jm, Am, At, Vt, V2);
+                console.log(`T1 = ${tj1*2.0} s\nT2 = ${tj2*2.0} s\nT3 = ${tj2*2.0} s\nTotal T = ${(tj1 + tj2 + tj3)*2.0} s\n`)
+                const T_end = (tj1 + tj2 + tj2) * 2.0;
+                [, , , P_end] = arot_calculated_3phase_s_curve(T_end, tj1, tj2, At, Vt, Pt, Jm, jm23)
+                P_end_hist.push(P_end);
+            }
 
             in_flare = P_end <= P2;
             // keep flare init up to date
@@ -359,16 +423,22 @@ function run_flare()
 
         } else if (!flare_finished) {
             const flare_time = t - flare_init.t;
-            [Jt, At, Vt, Pt] = arot_calculated_s_curve(flare_time, tj1, tj2, flare_init.a, flare_init.v, flare_init.p, Jm);
+
+            if (method == TWO_PHASE_METHOD) {
+                [Jt, At, Vt, Pt] = arot_calculated_s_curve(flare_time, tj1, tj2, flare_init.a, flare_init.v, flare_init.p, Jm);
+                // Check if we meet the exit conditions for the flare
+                flare_finished = t >= flare_init.t + (tj1 + tj2) * 2.0
+            } else {
+                [Jt, At, Vt, Pt] = arot_calculated_3phase_s_curve(flare_time, tj1, tj2, flare_init.a, flare_init.v, flare_init.p, Jm, jm23)
+                // Check if we meet the exit conditions for the flare
+                flare_finished = t >= flare_init.t + (tj1 + tj2 + tj2) * 2.0
+            }
 
             // Add values to keep array length correct
             P_end_hist.push(P2);
 
             // Keep the flare exit time up to date
             flare_finished_time = t;
-
-            // Check if we meet the exit conditions for the flare
-            flare_finished = t >= flare_init.t + (tj1 + tj2) * 2.0
 
         } else {
             // Assume constant accel at exit condition (not updating accel and jerk)
