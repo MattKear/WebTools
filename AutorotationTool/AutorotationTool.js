@@ -1,5 +1,6 @@
 const M_PI = Math.PI
 const M_2PI = M_PI * 2.0
+const GRAVITY = -9.81; // (m/s/s)
 
 pos_plot = {}
 vel_plot = {}
@@ -11,13 +12,13 @@ function initial_load()
     let plot;
 
     // Jerk
-    jerk_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
-                      { x:[], y:[], name: 'Flare End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+    jerk_plot.data = [{ x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                      { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                       { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s³" }]
 
     jerk_plot.layout = {
-        legend: { itemclick: false, itemdoubleclick: false, x: 0.9 },
-        margin: { b: 50, l: 60, r: 50, t: 20 },
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.85 },
+        margin: { b: 50, l: 60, r: 0, t: 20 },
         xaxis: { title: {text: time_scale_label } },
         yaxis: { title: {text: "Jerk (m/s³)" } }
     }
@@ -27,13 +28,14 @@ function initial_load()
     Plotly.newPlot(plot, jerk_plot.data, jerk_plot.layout, { displaylogo: false })
 
     // Acceleration
-    accel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
-                       { x:[], y:[], name: 'Flare End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
-                       { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" }]
+    accel_plot.data = [{ x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                       { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                       { x:[], y:[], name: 'Resultant', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" },
+                       { x:[], y:[], name: 'AP Measurment', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" }]
 
     accel_plot.layout = {
-        legend: { itemclick: false, itemdoubleclick: false, x: 0.9 },
-        margin: { b: 50, l: 60, r: 50, t: 20 },
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.85, y:1.05 },
+        margin: { b: 50, l: 60, r: 0, t: 20 },
         xaxis: { title: {text: time_scale_label } },
         yaxis: { title: {text: "Acceleration (m/s²)" } }
     }
@@ -43,13 +45,13 @@ function initial_load()
     Plotly.newPlot(plot, accel_plot.data, accel_plot.layout, { displaylogo: false });
 
     // velocity
-    vel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
-                     { x:[], y:[], name: 'Flare End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+    vel_plot.data = [{ x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                     { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                      { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s" }];
 
     vel_plot.layout = {
-        legend: { itemclick: false, itemdoubleclick: false, x: 0.9, y: 0.3 },
-        margin: { b: 50, l: 60, r: 50, t: 20 },
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.85, y: 0.3 },
+        margin: { b: 50, l: 60, r: 0, t: 20 },
         xaxis: { title: {text: time_scale_label } },
         yaxis: { title: {text: "Velocity (m/s)" } },
         shapes: [{
@@ -67,14 +69,14 @@ function initial_load()
     Plotly.newPlot(plot, vel_plot.data, vel_plot.layout, { displaylogo: false })
 
     // position
-    pos_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
-                     { x:[], y:[], name: 'Flare End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+    pos_plot.data = [{ x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                     { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                      { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" },
-                     { x:[], y:[], name: 'Projected Flare Exit', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" }]
+                     { x:[], y:[], name: 'Projected Exit', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" }]
 
     pos_plot.layout = {
-        legend: { itemclick: false, itemdoubleclick: false, x: 0.8},
-        margin: { b: 50, l: 60, r: 50, t: 20 },
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.85},
+        margin: { b: 50, l: 60, r: 0, t: 20 },
         xaxis: { title: {text: time_scale_label } },
         yaxis: { title: {text: "Position (m)" } },
         shapes: [{
@@ -334,7 +336,7 @@ class Trajectory
 }
 
 
-function run_flare()
+function run_sim()
 {
 
     const rotor_rad = parseFloat(document.getElementById("rotor_radius").value);
@@ -353,7 +355,6 @@ function run_flare()
     const Am = parseFloat(document.getElementById("max_vert_accel").value);
 
     const density = 1.225; // (kg/m^3)
-    const gravity = -9.81; // (m/s/s)
     const rotor_area = M_PI * rotor_rad * rotor_rad; // (m^2)
     const rotor_drag = 0.5 * density * rotor_area * rotor_cd // (kg/s)
 
@@ -363,6 +364,7 @@ function run_flare()
     const time = []
 
     var calcd_traj = new Trajectory();
+    var ap_measured_accel = [];
     let Jt = 0.0;
     let At = 0.0;
     let Vt = V0;
@@ -377,9 +379,31 @@ function run_flare()
 
     let P_end_hist = [];
 
+    // Identify which method we are using to calculate the trajectory
     const TWO_PHASE_METHOD = 0;
     const THREE_PHASE_METHOD = 1;
-    const method = THREE_PHASE_METHOD;
+    let method;
+    if (document.getElementById("method_cb").checked) {
+        console.log("Three Phase Method Selected");
+        method = THREE_PHASE_METHOD
+    } else {
+        console.log("Two Phase Method Selected");
+        method = TWO_PHASE_METHOD
+    }
+
+    // Identify which initial conditions we are using
+    const HOVER_AUTOROTATION = 0;
+    const FLARING = 1;
+    let initial_conditions;
+    if (document.getElementById("initial_conditions_cb").checked) {
+        console.log("Flare Initial Conditions Selected");
+        initial_conditions = FLARING
+    } else {
+        console.log("Hover Autorotation Conditions Selected");
+        initial_conditions = HOVER_AUTOROTATION
+    }
+
+    let measured_accel;
 
     // Run simulation
     while (t < 100.0) {
