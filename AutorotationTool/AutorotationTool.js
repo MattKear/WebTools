@@ -299,6 +299,9 @@ function calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0)
 
 function compute_time_split(jm, a0, a2, v0, v2)
 {
+    // we compute the trajectory due to the resultant acceleration. In this case that means removing gravity from the measurement then adding it back in after
+    a0 = (a0 - GRAVITY) * -1.0  // We need to be carful with signs in the AP implementation as it is not necessarily the same basis as here
+
     // T1 = 2 * tj1 and T2 = 2 * tj2
     const tj1 = (- a0 + safe_sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)))) / jm
     const tj2 = (- a2 + safe_sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)))) / jm
@@ -307,6 +310,9 @@ function compute_time_split(jm, a0, a2, v0, v2)
 
 function compute_trajectory_times(jm, am, a0, v0, v3)
 {
+    // we compute the trajectory due to the resultant acceleration. In this case that means removing gravity from the measurement then adding it back in after
+    a0 = (a0 - GRAVITY) * -1.0  // We need to be carful with signs in the AP implementation as it is not necessarily the same basis as here
+
     // Calculate first phase time period to achieve zero acceleration
     tj1 = -a0/jm;
 
@@ -425,14 +431,13 @@ function run_sim()
             let P_end;
             if (method == TWO_PHASE_METHOD) {
                 // Calculate the s-curve trajectory look forward position
-                [tj1, tj2] = compute_time_split(Jm, At, A2, Vt, V2)
+                [tj1, tj2] = compute_time_split(Jm, measured_accel, A2, Vt, V2)
                 const T_end = (tj1 + tj2) * 2.0;
                 [, , , P_end] = arot_calculated_s_curve(T_end, tj1, tj2, At, Vt, Pt, Jm);
                 P_end_hist.push(P_end);
 
             } else {
-                [tj1, tj2, jm23] = compute_trajectory_times(Jm, Am, At, Vt, V2);
-                console.log(`T1 = ${tj1*2.0} s\nT2 = ${tj2*2.0} s\nT3 = ${tj2*2.0} s\nTotal T = ${(tj1 + tj2 + tj3)*2.0} s\n`)
+                [tj1, tj2, jm23] = compute_trajectory_times(Jm, Am, measured_accel, Vt, V2);
                 const T_end = (tj1 + tj2 + tj2) * 2.0;
                 [, , , P_end] = arot_calculated_3phase_s_curve(T_end, tj1, tj2, At, Vt, Pt, Jm, jm23)
                 P_end_hist.push(P_end);
@@ -452,11 +457,15 @@ function run_sim()
                 [Jt, At, Vt, Pt] = arot_calculated_s_curve(flare_time, tj1, tj2, flare_init.a, flare_init.v, flare_init.p, Jm);
                 // Check if we meet the exit conditions for the flare
                 flare_finished = t >= flare_init.t + (tj1 + tj2) * 2.0
+                
             } else {
                 [Jt, At, Vt, Pt] = arot_calculated_3phase_s_curve(flare_time, tj1, tj2, flare_init.a, flare_init.v, flare_init.p, Jm, jm23)
                 // Check if we meet the exit conditions for the flare
                 flare_finished = t >= flare_init.t + (tj1 + tj2 + tj2) * 2.0
             }
+
+            // Keep account for the change of reference frame/convention to plot the acceleration as we would expect AP to see it
+            measured_accel = (At * -1.0) + GRAVITY;
 
             // Add values to keep array length correct
             P_end_hist.push(P2);
@@ -477,6 +486,8 @@ function run_sim()
         calcd_traj.a.push(At);
         calcd_traj.v.push(Vt);
         calcd_traj.p.push(Pt);
+
+        ap_measured_accel.push(measured_accel)
 
         // Break from simulation
         if (flare_finished && Pt <= 0) {
@@ -500,13 +511,15 @@ function run_sim()
     jerk_plot.data[2].y = calcd_traj.j
     Plotly.redraw("jerk_plot")
 
-    const a_min_max = [Math.min(...calcd_traj.a), Math.max(...calcd_traj.a)]
+    const a_min_max = [Math.min(Math.min(...calcd_traj.a), Math.min(...ap_measured_accel)), Math.max(Math.max(...calcd_traj.a), Math.max(...ap_measured_accel))]
     accel_plot.data[0].x = flare_start_time
     accel_plot.data[0].y = a_min_max
     accel_plot.data[1].x = flare_end_time
     accel_plot.data[1].y = a_min_max
     accel_plot.data[2].x = time
-    accel_plot.data[2].y = calcd_traj.a
+    accel_plot.data[2].y = calcd_traj.a // Resultant Accleration
+    accel_plot.data[3].x = time
+    accel_plot.data[3].y = ap_measured_accel // Acceleration as we would see in AP's IMU measuremnt
     Plotly.redraw("accel_plot")
 
     const v_min_max = [Math.min(...calcd_traj.v), Math.max(...calcd_traj.v)]
