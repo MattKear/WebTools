@@ -46,7 +46,7 @@
 
 <h1><a href="" style="color: #000000; text-decoration:none;">Autorotation Touch Down Trajectory Tool</a></h1>
 
-<body onload="initial_load(); run_sim()">
+<body onload="initial_load(); update_defaults_then_run()">
 <table>
   <tr>
     <td>
@@ -98,13 +98,13 @@
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="flare_time_const" value="1" min="0.1" step="0.01" max="3.0" style="width: 50px" onchange="run_sim()">
+          <input type="number" id="flare_time_const" value="0.5" min="0.01" step="0.01" max="3.0" style="width: 50px" onchange="run_sim()">
           <label for="flare_time_const">Flare Time Const (s)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="flare_time_const" value="3" min="-10" step="0.1" max="10" style="width: 50px" onchange="run_sim()">
-          <label for="flare_time_const">Flare Pos Start (m)</label>
+          <input type="number" id="flare_start_height" value="18" min="2" step="0.5" max="100" style="width: 50px" onchange="run_sim()">
+          <label for="flare_start_height">Flare Pos Start (m)</label>
         </p>
 
       </fieldset>
@@ -181,12 +181,12 @@
             margin-top: 5px;">
 
                 <p style="margin-top:5px; margin-bottom:5px;">
-                  <input type="checkbox" id="method_cb" onchange="run_sim()">
+                  <input type="checkbox" id="method_cb" onchange="update_defaults_then_run()">
                   <label for="method_cb">Method (3 phase = ticked)</label>
                 </p>
 
                 <p style="margin-top:5px; margin-bottom:5px;">
-                  <input type="checkbox" id="initial_conditions_cb" onchange="run_sim()" checked>
+                  <input type="checkbox" id="initial_conditions_cb" onchange="update_defaults_then_run()" checked>
                   <label for="initial_conditions_cb">Initial Conditions (ticked = flaring)</label>
                 </p>
         </div>

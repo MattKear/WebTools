@@ -12,7 +12,8 @@ function initial_load()
     let plot;
 
     // Jerk
-    jerk_plot.data = [{ x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+    jerk_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                      { x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                       { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                       { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s³" }]
 
@@ -28,7 +29,8 @@ function initial_load()
     Plotly.newPlot(plot, jerk_plot.data, jerk_plot.layout, { displaylogo: false })
 
     // Acceleration
-    accel_plot.data = [{ x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+    accel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                       { x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                        { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                        { x:[], y:[], name: 'Resultant', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" },
                        { x:[], y:[], name: 'AP Measurment', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" }]
@@ -45,7 +47,8 @@ function initial_load()
     Plotly.newPlot(plot, accel_plot.data, accel_plot.layout, { displaylogo: false });
 
     // velocity
-    vel_plot.data = [{ x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+    vel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                     { x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                      { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                      { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s" }];
 
@@ -69,7 +72,8 @@ function initial_load()
     Plotly.newPlot(plot, vel_plot.data, vel_plot.layout, { displaylogo: false })
 
     // position
-    pos_plot.data = [{ x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+    pos_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                     { x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                      { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                      { x:[], y:[], name: 'Trajectory', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" },
                      { x:[], y:[], name: 'Projected Exit', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m" }]
@@ -341,6 +345,22 @@ class Trajectory
     }
 }
 
+// When we change the simulation mode, for convenience we update some of the starting values of the inputs
+// then we run the simulation
+function update_defaults_then_run()
+{
+     if (document.getElementById("initial_conditions_cb").checked) {
+        // Set default values for flare simulation
+        document.getElementById("initial_vel").value = -11.0;
+        document.getElementById("initial_pos").value = 50.0;
+    } else {
+        // Set default values for hover autorotation simulation
+        document.getElementById("initial_vel").value = 0.0;
+        document.getElementById("initial_pos").value = 8.0;
+    }
+    run_sim();
+}
+
 
 function run_sim()
 {
@@ -376,14 +396,28 @@ function run_sim()
     let Vt = V0;
     let Pt = P0;
 
-    let in_flare = false;
-    let flare_finished = false;
-    let flare_finished_time = 0;
-    let flare_init = {t:0.0, a:0.0, v:0.0, p:0.0};
-    let tj1, tj2, tj3;
+    let in_touchdown = false;
+    let touchdown_finished = false;
+    let touchdown_finished_time = 0;
+    let touchdown_init = {t:0.0, a:0.0, v:0.0, p:0.0};
+    let tj1, tj2;
     let jm23 = 0;
 
     let P_end_hist = [];
+
+    const flare_sim = {
+        started: false,
+        complete: false,
+        init: {t:0.0, a:0.0, v:0.0, p:0.0},
+        Jm: 0,
+        start_hgt: parseFloat(document.getElementById("flare_start_height").value),
+        tj: parseFloat(document.getElementById("flare_time_const").value),
+        Am: parseFloat(document.getElementById("flare_accel").value),
+        dwell: {complete:false, start:0, time:0.5} //
+    };
+
+    // Calculate the Jm needed for the flare peak accel
+    flare_sim.Jm = flare_sim.Am / flare_sim.tj;
 
     // Identify which method we are using to calculate the trajectory
     const TWO_PHASE_METHOD = 0;
@@ -403,10 +437,10 @@ function run_sim()
     let initial_conditions;
     if (document.getElementById("initial_conditions_cb").checked) {
         console.log("Flare Initial Conditions Selected");
-        initial_conditions = FLARING
+        initial_conditions = FLARING;
     } else {
         console.log("Hover Autorotation Conditions Selected");
-        initial_conditions = HOVER_AUTOROTATION
+        initial_conditions = HOVER_AUTOROTATION;
     }
 
     let measured_accel;
@@ -414,19 +448,90 @@ function run_sim()
     // Run simulation
     while (t < 100.0) {
 
-        if (!in_flare) {
-            // Crude simulation of heli descending in glide
-            const weight = mass * gravity; // (N)
-            const drag_direction = Math.sign(Vt) * -1.0; // drag always works in the opposite direction to velocity
-            const drag_force = rotor_drag * Vt * Vt * drag_direction; // (N)
-            const resultant_force = drag_force + weight; // (N)
+        if (!in_touchdown) {
 
-            // Assume constant accel/zero jerk
-            Jt = 0.0;
-            At = resultant_force / mass;
-            const initial_V = Vt;
-            Vt = initial_V + At * dt;
-            Pt += initial_V * dt + 0.5 * At * dt * dt;
+            if (initial_conditions == HOVER_AUTOROTATION) {
+                // Crude simulation of heli in hover autorotation
+                const weight = mass * GRAVITY; // (N)
+                const drag_direction = Math.sign(Vt) * -1.0; // drag always works in the opposite direction to velocity
+                const drag_force = rotor_drag * Vt * Vt * drag_direction; // (N)
+                const resultant_force = drag_force + weight; // (N)
+
+                // Assume constant accel/zero jerk
+                Jt = 0.0;
+                At = resultant_force / mass;
+                const initial_V = Vt;
+                Vt = initial_V + At * dt;
+                Pt += initial_V * dt + 0.5 * At * dt * dt;
+
+            } else {
+                // Crude simulation starting from steady state glide and flaring 
+
+                if (!flare_sim.started) {
+                    // Descend at steady state conditions
+                    Jt = 0.0;
+                    At = 0.0;
+                    const initial_V = Vt;
+                    Vt = initial_V + At * dt;
+                    Pt += initial_V * dt + 0.5 * At * dt * dt;
+
+                    // Keep flare initial conditions up to date
+                    flare_sim.init.a
+                    flare_sim.init.t = t;
+                    flare_sim.init.a = At;
+                    flare_sim.init.v = Vt;
+                    flare_sim.init.p = Pt;
+
+                    // Check if we need to progress flare state
+                    flare_sim.started = Pt <= flare_sim.start_hgt;
+
+                } else if (!flare_sim.complete) {
+                    // Run a single period of S-curve to decelerate the aircraft representing the flare
+                    const time_now = t - flare_sim.init.t;
+                    [Jt, At, Vt, Pt] = calc_javp_for_segment_incr_jerk(time_now, flare_sim.tj, flare_sim.Jm, flare_sim.init.a, flare_sim.init.v, flare_sim.init.p);
+
+                    // Check if we need to progress flare state
+                    flare_sim.complete = time_now >= flare_sim.tj * 2.0;
+
+                    flare_sim.dwell.start = t;
+
+                } else if (!flare_sim.dwell.complete) {
+                    // Allow a short dwell period where the aircraft stays at the same acceleration
+                    // This matches the behavior we see in real flight
+                    const time_now = t - flare_sim.dwell.start;
+
+                    // Dont update jerk or accel
+                    const initial_V = Vt;
+                    Vt = initial_V + At * dt;
+                    Pt += initial_V * dt + 0.5 * At * dt * dt;
+
+                    flare_sim.dwell.complete = time_now >= flare_sim.dwell.time;
+
+                } else {
+                    // We may have flared too high in which case we won't have started the touch down so we need to start accelerating to our rotor drag condition
+                    const weight = mass * GRAVITY; // (N)
+                    const drag_direction = Math.sign(Vt) * -1.0; // drag always works in the opposite direction to velocity
+                    const drag_force = rotor_drag * Vt * Vt * drag_direction; // (N)
+                    const resultant_force = drag_force + weight; // (N)
+
+                    // Assume a time period that the result force resolve over
+                    const jerk_period = 0.2; // (s)
+
+                    delta_A = (resultant_force / mass) - At
+                    initial_J = Jt;
+                    Jt = delta_A / jerk_period;
+                    const initial_A = At;
+                    At = initial_A + initial_J * dt;
+                    const initial_V = Vt;
+                    Vt = initial_V + At * dt + initial_J * dt * dt;
+                    Pt += initial_V * dt + 0.5 * At * dt * dt + (1/6) * initial_J * dt * dt * dt;
+                }
+
+            }
+
+
+            // Account for the change of reference frame/convention to plot the acceleration as we would expect AP to see it
+            measured_accel = (At * -1.0) + GRAVITY;
 
             let P_end;
             if (method == TWO_PHASE_METHOD) {
@@ -443,25 +548,25 @@ function run_sim()
                 P_end_hist.push(P_end);
             }
 
-            in_flare = P_end <= P2;
+            in_touchdown = P_end <= P2;
             // keep flare init up to date
-            flare_init.t = t;
-            flare_init.a = At;
-            flare_init.v = Vt;
-            flare_init.p = Pt;
+            touchdown_init.t = t;
+            touchdown_init.a = At;
+            touchdown_init.v = Vt;
+            touchdown_init.p = Pt;
 
-        } else if (!flare_finished) {
-            const flare_time = t - flare_init.t;
+        } else if (!touchdown_finished) {
+            const flare_time = t - touchdown_init.t;
 
             if (method == TWO_PHASE_METHOD) {
-                [Jt, At, Vt, Pt] = arot_calculated_s_curve(flare_time, tj1, tj2, flare_init.a, flare_init.v, flare_init.p, Jm);
+                [Jt, At, Vt, Pt] = arot_calculated_s_curve(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm);
                 // Check if we meet the exit conditions for the flare
-                flare_finished = t >= flare_init.t + (tj1 + tj2) * 2.0
+                touchdown_finished = t >= touchdown_init.t + (tj1 + tj2) * 2.0
                 
             } else {
-                [Jt, At, Vt, Pt] = arot_calculated_3phase_s_curve(flare_time, tj1, tj2, flare_init.a, flare_init.v, flare_init.p, Jm, jm23)
+                [Jt, At, Vt, Pt] = arot_calculated_3phase_s_curve(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm, jm23)
                 // Check if we meet the exit conditions for the flare
-                flare_finished = t >= flare_init.t + (tj1 + tj2 + tj2) * 2.0
+                touchdown_finished = t >= touchdown_init.t + (tj1 + tj2 + tj2) * 2.0
             }
 
             // Keep account for the change of reference frame/convention to plot the acceleration as we would expect AP to see it
@@ -471,7 +576,7 @@ function run_sim()
             P_end_hist.push(P2);
 
             // Keep the flare exit time up to date
-            flare_finished_time = t;
+            touchdown_finished_time = t;
 
         } else {
             // Assume constant accel at exit condition (not updating accel and jerk)
@@ -490,7 +595,7 @@ function run_sim()
         ap_measured_accel.push(measured_accel)
 
         // Break from simulation
-        if (flare_finished && Pt <= 0) {
+        if (touchdown_finished && Pt <= 0) {
             break;
         }
 
@@ -499,47 +604,56 @@ function run_sim()
     }
 
     // Update plots
-    const flare_start_time = [flare_init.t, flare_init.t];
-    const flare_end_time = [flare_finished_time, flare_finished_time];
+    const flare_start_time = [flare_sim.init.t, flare_sim.init.t]
+    const touchdown_start_time = [touchdown_init.t, touchdown_init.t];
+    const touchdown_end_time = [touchdown_finished_time, touchdown_finished_time];
 
-    const j_min_max = [Math.min(...calcd_traj.j), Math.max(...calcd_traj.j)]
+    const j_min_max = [Math.min(...calcd_traj.j), Math.max(...calcd_traj.j)];
     jerk_plot.data[0].x = flare_start_time;
     jerk_plot.data[0].y = j_min_max;
-    jerk_plot.data[1].x = flare_end_time;
+    jerk_plot.data[1].x = touchdown_start_time;
     jerk_plot.data[1].y = j_min_max;
-    jerk_plot.data[2].x = time
-    jerk_plot.data[2].y = calcd_traj.j
-    Plotly.redraw("jerk_plot")
+    jerk_plot.data[2].x = touchdown_end_time;
+    jerk_plot.data[2].y = j_min_max;
+    jerk_plot.data[3].x = time;
+    jerk_plot.data[3].y = calcd_traj.j;
+    Plotly.redraw("jerk_plot");
 
-    const a_min_max = [Math.min(Math.min(...calcd_traj.a), Math.min(...ap_measured_accel)), Math.max(Math.max(...calcd_traj.a), Math.max(...ap_measured_accel))]
-    accel_plot.data[0].x = flare_start_time
-    accel_plot.data[0].y = a_min_max
-    accel_plot.data[1].x = flare_end_time
-    accel_plot.data[1].y = a_min_max
-    accel_plot.data[2].x = time
-    accel_plot.data[2].y = calcd_traj.a // Resultant Accleration
-    accel_plot.data[3].x = time
-    accel_plot.data[3].y = ap_measured_accel // Acceleration as we would see in AP's IMU measuremnt
-    Plotly.redraw("accel_plot")
+    const a_min_max = [Math.min(Math.min(...calcd_traj.a), Math.min(...ap_measured_accel)), Math.max(Math.max(...calcd_traj.a), Math.max(...ap_measured_accel))];
+    accel_plot.data[0].x = flare_start_time;
+    accel_plot.data[0].y = a_min_max;
+    accel_plot.data[1].x = touchdown_start_time;
+    accel_plot.data[1].y = a_min_max;
+    accel_plot.data[2].x = touchdown_end_time;
+    accel_plot.data[2].y = a_min_max;
+    accel_plot.data[3].x = time;
+    accel_plot.data[3].y = calcd_traj.a; // Resultant Accleration
+    accel_plot.data[4].x = time;
+    accel_plot.data[4].y = ap_measured_accel; // Acceleration as we would see in AP's IMU measuremnt
+    Plotly.redraw("accel_plot");
 
-    const v_min_max = [Math.min(...calcd_traj.v), Math.max(...calcd_traj.v)]
-    vel_plot.data[0].x = flare_start_time
-    vel_plot.data[0].y = v_min_max
-    vel_plot.data[1].x = flare_end_time
-    vel_plot.data[1].y = v_min_max
-    vel_plot.data[2].x = time
-    vel_plot.data[2].y = calcd_traj.v
-    Plotly.redraw("vel_plot")
+    const v_min_max = [Math.min(...calcd_traj.v), Math.max(...calcd_traj.v)];
+    vel_plot.data[0].x = flare_start_time;
+    vel_plot.data[0].y = v_min_max;
+    vel_plot.data[1].x = touchdown_start_time;
+    vel_plot.data[1].y = v_min_max;
+    vel_plot.data[2].x = touchdown_end_time;
+    vel_plot.data[2].y = v_min_max;
+    vel_plot.data[3].x = time;
+    vel_plot.data[3].y = calcd_traj.v;
+    Plotly.redraw("vel_plot");
 
-    const p_min_max = [Math.min(...calcd_traj.p), Math.max(...calcd_traj.p)]
-    pos_plot.data[0].x = flare_start_time
-    pos_plot.data[0].y = p_min_max
-    pos_plot.data[1].x = flare_end_time
-    pos_plot.data[1].y = p_min_max
-    pos_plot.data[2].x = time
-    pos_plot.data[2].y = calcd_traj.p
-    pos_plot.data[3].x = time
-    pos_plot.data[3].y = P_end_hist
-    Plotly.redraw("pos_plot")
+    const p_min_max = [Math.min(...calcd_traj.p), Math.max(...calcd_traj.p)];
+    pos_plot.data[0].x = flare_start_time;
+    pos_plot.data[0].y = p_min_max;
+    pos_plot.data[1].x = touchdown_start_time;
+    pos_plot.data[1].y = p_min_max;
+    pos_plot.data[2].x = touchdown_end_time;
+    pos_plot.data[2].y = p_min_max;
+    pos_plot.data[3].x = time;
+    pos_plot.data[3].y = calcd_traj.p;
+    pos_plot.data[4].x = time;
+    pos_plot.data[4].y = P_end_hist;
+    Plotly.redraw("pos_plot");
 
 }
