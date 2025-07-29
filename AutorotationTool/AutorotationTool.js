@@ -1,6 +1,15 @@
 const M_PI = Math.PI
 const M_2PI = M_PI * 2.0
 const GRAVITY = -9.81; // (m/s/s)
+const METHOD = {
+    TWO_PHASE:   {value: 0, label:"Two Phase"},
+    THREE_PHASE: {value: 1, label:"Three Phase"},
+};
+
+const SCENARIO = {
+    HOVER_AUTOROTATION: {value: 0, label:"Hover Autorotation"},
+    FLARING:            {value: 1, label:"Flare Phase"},
+};
 
 pos_plot = {}
 vel_plot = {}
