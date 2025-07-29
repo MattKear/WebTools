@@ -1,6 +1,8 @@
-const M_PI = Math.PI
-const M_2PI = M_PI * 2.0
-const GRAVITY = -9.81; // (m/s/s)
+const M_PI = Math.PI;
+const M_2PI = M_PI * 2.0;
+const GRAVITY = 9.81; // (m/s/s)
+const DENSITY = 1.225; // (kg/m^3)
+
 const METHOD = {
     TWO_PHASE:   {value: 0, label:"Two Phase"},
     THREE_PHASE: {value: 1, label:"Three Phase"},
@@ -9,12 +11,14 @@ const METHOD = {
 const SCENARIO = {
     HOVER_AUTOROTATION: {value: 0, label:"Hover Autorotation"},
     FLARING:            {value: 1, label:"Flare Phase"},
+    INITIAL_COND:       {value: 2, label:"Specified Conditions"},
 };
 
-pos_plot = {}
-vel_plot = {}
-accel_plot = {}
-jerk_plot = {}
+pos_plot = {};
+vel_plot = {};
+accel_plot = {};
+jerk_plot = {};
+time_plot = {};
 function initial_load()
 {
     const time_scale_label = "Time (s)";
@@ -41,8 +45,9 @@ function initial_load()
     accel_plot.data = [{ x:[], y:[], name: 'Flare Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                        { x:[], y:[], name: 'Touchdown Start', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
                        { x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
-                       { x:[], y:[], name: 'Resultant', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" },
-                       { x:[], y:[], name: 'AP Measurment', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" }]
+                       { x:[], y:[], name: 'AP IMU Measure', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" },
+                       { x:[], y:[], name: 'AP Grav Adjusted', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" },
+                       { x:[], y:[], name: 'Simulation', mode: 'lines', line: {dash: 'dash'}, hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} m/s²" }]
 
     accel_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false, x: 0.85, y:1.05 },
@@ -106,12 +111,37 @@ function initial_load()
     Plotly.purge(plot)
     Plotly.newPlot(plot, pos_plot.data, pos_plot.layout, { displaylogo: false })
 
+    // trajectory time periods
+    time_plot.data = [{ x:[], y:[], name: 'T1', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" },
+                     { x:[], y:[], name: 'T2', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" }]
+
+    time_plot.layout = {
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.85},
+        margin: { b: 50, l: 60, r: 0, t: 20 },
+        xaxis: { title: {text: time_scale_label } },
+        yaxis: { title: {text: "Trajectory Time Period (s)" } },
+        shapes: [{
+            type: 'line',
+            line: { dash: "dot" },
+            xref: 'paper',
+            x0: 0,
+            x1: 1,
+            visible: false,
+        }]
+    }
+
+    plot = document.getElementById("time_plot")
+    Plotly.purge(plot)
+    Plotly.newPlot(plot, time_plot.data, time_plot.layout, { displaylogo: false })
+
+
     // Link all time axis
     link_plot_axis_range([
         ["jerk_plot", "x", "", jerk_plot],
         ["accel_plot", "x", "", accel_plot],
         ["vel_plot", "x", "", vel_plot],
         ["pos_plot", "x", "", pos_plot],
+        ["time_plot", "x", "", time_plot],
     ])
 
     // Link plot reset
@@ -120,6 +150,7 @@ function initial_load()
         ["accel_plot", accel_plot],
         ["vel_plot", vel_plot],
         ["pos_plot", pos_plot],
+        ["time_plot", time_plot],
     ])
 
     // Populate dropdown boxes
@@ -233,7 +264,7 @@ function arot_s_curve(time_now, T, Jm, A0, V0, P0, Af)
 }
 
 // special handling function to adapt the enumbent s-curve maths to fit the trajectory of the autorotation
-function arot_calculated_s_curve(time_now, tj1, tj2, A0, V0, P0, Jm)
+function update_scurve_trajectory(time_now, tj1, tj2, A0, V0, P0, Jm)
 {
     const T1 = tj1 * 2.0;
 
@@ -286,9 +317,9 @@ function arot_calculated_3phase_s_curve(time_now, tj1, tj23, A0, V0, P0, Jm1, Jm
 function calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0)
 {
     var Jt = 0.0, At = A0, Vt = V0, Pt = P0;
-    // if (!is_positive(tj)) {
-    //     return [Jt, At, Vt, Pt];
-    // }
+    if (!is_positive(tj)) {
+        return [Jt, At, Vt, Pt];
+    }
     const Alpha = Jm * 0.5;
     const Beta = M_PI / tj;
     Jt = Alpha * (1.0 - Math.cos(Beta * time_now));
@@ -298,10 +329,11 @@ function calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0)
     return [Jt, At, Vt, Pt];
 }
 
-function compute_time_split(jm, a0, a2, v0, v2)
+function calc_scurve_trajectory_times(a0, v0)
 {
-    // we compute the trajectory due to the resultant acceleration. In this case that means removing gravity from the measurement then adding it back in after
-    a0 = (a0 - GRAVITY) * -1.0  // We need to be carful with signs in the AP implementation as it is not necessarily the same basis as here
+    const v2 = parseFloat(document.getElementById("final_vel").value);
+    const a2 = parseFloat(document.getElementById("final_accel").value);
+    const jm = parseFloat(document.getElementById("max_jerk").value);
 
     // T1 = 2 * tj1 and T2 = 2 * tj2
     const tj1 = (- a0 + safe_sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)))) / jm
@@ -309,11 +341,48 @@ function compute_time_split(jm, a0, a2, v0, v2)
     return [tj1, tj2]
 }
 
+function should_begin_touchdown(hagl, a0, v0)
+{
+    const touchdown_max_height = parseFloat(document.getElementById("touchdown_max_height").value);
+    if (hagl > touchdown_max_height) {
+        return [false, null, null, null];
+    }
+
+    // if (v0 > -1.0) {
+    //     console.log('Descent vel not below -1.0')
+    //     return [false, null, null, null];
+    // }
+
+    const [tj1, tj2] = calc_scurve_trajectory_times(a0, v0);
+
+    // console.log(`tj1 = ${tj1}, tj2 = ${tj2}`)
+
+    const jm = parseFloat(document.getElementById("max_jerk").value);
+    const BUFFER_HEIGHT = parseFloat(document.getElementById("final_pos").value);
+
+    let trajectory_check;
+    let future_pos = null;
+    if (is_positive(tj1) && is_positive(tj2)) {
+        // Look ahead to end of first phase scurve to get initial conditions for 2nd phase
+        const [j1, a1, v1, p1] = calc_javp_for_segment_incr_jerk(tj1 * 2.0, tj1, jm, a0, v0, hagl);
+
+        // Look ahead to end of second phase scurve to get exit conditions
+        let j2, a2, v2;
+        [j2, a2, v2, future_pos] = calc_javp_for_segment_incr_jerk(tj2 * 2.0, tj2, jm * -1.0, a1, v1, p1);
+        // We give ourselves a small buffer to leave some margin for error
+        trajectory_check = future_pos <= BUFFER_HEIGHT;
+
+    } else {
+        throw new Error ('tj1 or tj2 not positive');
+        return [false, null, null, null];
+    }
+
+    return [trajectory_check, future_pos, tj1, tj2];
+}
+
+
 function compute_trajectory_times(jm, am, a0, v0, v3)
 {
-    // we compute the trajectory due to the resultant acceleration. In this case that means removing gravity from the measurement then adding it back in after
-    a0 = (a0 - GRAVITY) * -1.0  // We need to be carful with signs in the AP implementation as it is not necessarily the same basis as here
-
     // Calculate first phase time period to achieve zero acceleration
     tj1 = -a0/jm;
 
@@ -329,6 +398,96 @@ function compute_trajectory_times(jm, am, a0, v0, v3)
     return [tj1, tj23, jm23];
 }
 
+// Crude simulation of heli in free-fall from a hover
+function run_freefall_model(dt, v0, p0)
+{
+    const rotor_rad = parseFloat(document.getElementById("rotor_radius").value);
+    const rotor_cd = parseFloat(document.getElementById("rotor_cd").value);
+    const mass = parseFloat(document.getElementById("mass").value);
+
+    const rotor_area = M_PI * rotor_rad * rotor_rad; // (m^2)
+    const rotor_drag = 0.5 * DENSITY * rotor_area * rotor_cd // (kg/s)
+
+    const weight = mass * -GRAVITY; // (N)
+    const drag_direction = Math.sign(v0) * -1.0; // drag always works in the opposite direction to velocity
+    const drag_force = rotor_drag * v0 * v0 * drag_direction; // (N)
+    const resultant_force = drag_force + weight; // (N)
+
+    // Assume constant accel/zero jerk
+    const jt = 0.0;
+    let at = resultant_force / mass;
+    const vt = v0 + at * dt;
+    const pt = p0 + v0 * dt + 0.5 * at * dt * dt;
+
+    return [jt, at, vt, pt]
+}
+
+
+// Crude simulation starting from steady state glide and flaring 
+function run_flare_model(sim, dt, t, j0, a0, v0, p0)
+{
+    if (!sim.started) {
+        // Descend at steady state conditions
+        jt = 0.0;
+        at = 0.0;
+        vt = v0 + at * dt;
+        pt = p0 + v0 * dt + 0.5 * at * dt * dt;
+
+        // Keep flare initial conditions up to date
+        sim.init.t = t;
+        sim.init.a = at;
+        sim.init.v = vt;
+        sim.init.p = pt;
+
+        // Check if we need to progress flare state
+        sim.started = pt <= sim.start_hgt;
+
+    } else if (!sim.complete) {
+        // Run a single period of S-curve to decelerate the aircraft representing the flare
+        const time_now = t - sim.init.t;
+        [jt, at, vt, pt] = calc_javp_for_segment_incr_jerk(time_now, sim.tj, sim.Jm, sim.init.a, sim.init.v, sim.init.p);
+
+        // Check if we need to progress flare state
+        sim.complete = time_now >= sim.tj * 2.0;
+
+        sim.dwell.start = t;
+
+    } else if (!sim.dwell.complete) {
+        // Allow a short dwell period where the aircraft stays at the same acceleration
+        // This matches the behavior we see in real flight
+        const time_now = t - sim.dwell.start;
+
+        // Dont update jerk or accel
+        vt = v0 + at * dt;
+        pt = p0 + v0 * dt + 0.5 * at * dt * dt;
+
+        sim.dwell.complete = time_now >= sim.dwell.time;
+
+    } else {
+        // We may have flared too high in which case we won't have started the touch down so we need to start accelerating to our rotor drag condition
+        const rotor_rad = parseFloat(document.getElementById("rotor_radius").value);
+        const rotor_cd = parseFloat(document.getElementById("rotor_cd").value);
+        const mass = parseFloat(document.getElementById("mass").value);
+
+        const rotor_area = M_PI * rotor_rad * rotor_rad; // (m^2)
+        const rotor_drag = 0.5 * DENSITY * rotor_area * rotor_cd; // (kg/s)
+        const weight = mass * -GRAVITY; // (N)
+        const drag_direction = Math.sign(v0) * -1.0; // drag always works in the opposite direction to velocity
+        const drag_force = rotor_drag * v0 * v0 * drag_direction; // (N)
+        const resultant_force = drag_force + weight; // (N)
+
+        // Assume a time period that the result force resolve over
+        const jerk_period = 0.2; // (s)
+
+        delta_A = (resultant_force / mass) - a0;
+        jt = delta_A / jerk_period;
+        at = a0 + j0 * dt;
+        vt = v0 + a0 * dt + j0 * dt * dt;
+        pt = p0 + v0 * dt + 0.5 * at * dt * dt + (1/6) * j0 * dt * dt * dt;
+    }
+
+    return [jt, at, vt, pt];
+}
 
 
 class Trajectory
@@ -339,6 +498,8 @@ class Trajectory
         this.a = []; // accel (m/s/s)
         this.v = []; // vel (m/s)
         this.p = []; // pos (m)
+        this.T1 = [];
+        this.T2 = [];
     }
 }
 
@@ -387,8 +548,6 @@ function update_defaults_then_run()
         const shouldDisable = initial_conditions != SCENARIO.FLARING.value;
         setInputActive(id, shouldDisable);
     });
-    
-
 
     run_sim();
 }
@@ -397,24 +556,24 @@ function update_defaults_then_run()
 function run_sim()
 {
 
-    const rotor_rad = parseFloat(document.getElementById("rotor_radius").value);
-    const rotor_cd = parseFloat(document.getElementById("rotor_cd").value);
-    const mass = parseFloat(document.getElementById("mass").value);
+    // console.log('jerk_plot.data =',  jerk_plot.data);
+    // console.log('accel_plot.data =', accel_plot.data);
+    // console.log('vel_plot.data  =',  vel_plot.data);
+    // console.log('pos_plot.data  =',  pos_plot.data);
+    // console.log('time_plot.data =', time_plot.data);
 
-    // const A0 = parseFloat(document.getElementById("inital_accel").value);
+    const A0 = parseFloat(document.getElementById("initial_accel").value);
     const V0 = parseFloat(document.getElementById("initial_vel").value);
     const P0 = parseFloat(document.getElementById("initial_pos").value);
 
-    const A2 = parseFloat(document.getElementById("final_accel").value);
     const V2 = parseFloat(document.getElementById("final_vel").value);
     const P2 = parseFloat(document.getElementById("final_pos").value);
 
     const Jm = parseFloat(document.getElementById("max_jerk").value);
     const Am = parseFloat(document.getElementById("max_vert_accel").value);
 
-    const density = 1.225; // (kg/m^3)
-    const rotor_area = M_PI * rotor_rad * rotor_rad; // (m^2)
-    const rotor_drag = 0.5 * density * rotor_area * rotor_cd // (kg/s)
+    // Identify which initial conditions we are using
+    let initial_conditions = parseFloat(document.getElementById("initial_conditions_select").value)
 
     // init a time vector
     const dt = 0.01 // (s)
@@ -422,9 +581,17 @@ function run_sim()
     const time = []
 
     var calcd_traj = new Trajectory();
-    var ap_measured_accel = [];
+    var ap_imu_accel = [];
+    var ap_gravity_adjusted_accel = [];
     let Jt = 0.0;
-    let At = 0.0;
+
+    // At is the "simulation" acceleration.  This is the resultant acceleration that moves a body
+    if (initial_conditions == SCENARIO.INITIAL_COND.value) {
+        At = A0;
+    } else {
+        At = -GRAVITY;
+    }
+
     let Vt = V0;
     let Pt = P0;
 
@@ -453,22 +620,10 @@ function run_sim()
 
     // Identify which method we are using to calculate the trajectory
     let method = parseFloat(document.getElementById("method_select").value)
-    if (method == METHOD.THREE_PHASE.value) {
-        console.log("Three Phase Method Selected");
-    } else {
-        console.log("Two Phase Method Selected");
-    }
 
-    // Identify which initial conditions we are using
-
-    let initial_conditions = parseFloat(document.getElementById("initial_conditions_select").value)
-    if (initial_conditions == SCENARIO.FLARING.value) {
-        console.log("Flare Initial Conditions Selected");
-    } else {
-        console.log("Hover Autorotation Conditions Selected");
-    }
-
-    let measured_accel;
+    // remove gravity from measurement in last time step
+    let imu_accel = (At + GRAVITY) * -1.0; // positive down
+    let grav_adjusted_accel = -(imu_accel + GRAVITY);
 
     // Run simulation
     while (t < 100.0) {
@@ -476,114 +631,78 @@ function run_sim()
         if (!in_touchdown) {
 
             if (initial_conditions == SCENARIO.HOVER_AUTOROTATION.value) {
+                [Jt, At, Vt, Pt] = run_freefall_model(dt, Vt, Pt);
 
-            } else {
-                // Crude simulation starting from steady state glide and flaring 
+            } else if (initial_conditions == SCENARIO.FLARING.value){
+                [Jt, At, Vt, Pt] = run_flare_model(flare_sim, dt, t, Jt, At, Vt, Pt)
 
-                if (!flare_sim.started) {
-                    // Descend at steady state conditions
-                    Jt = 0.0;
-                    At = 0.0;
-                    const initial_V = Vt;
-                    Vt = initial_V + At * dt;
-                    Pt += initial_V * dt + 0.5 * At * dt * dt;
-
-                    // Keep flare initial conditions up to date
-                    flare_sim.init.a
-                    flare_sim.init.t = t;
-                    flare_sim.init.a = At;
-                    flare_sim.init.v = Vt;
-                    flare_sim.init.p = Pt;
-
-                    // Check if we need to progress flare state
-                    flare_sim.started = Pt <= flare_sim.start_hgt;
-
-                } else if (!flare_sim.complete) {
-                    // Run a single period of S-curve to decelerate the aircraft representing the flare
-                    const time_now = t - flare_sim.init.t;
-                    [Jt, At, Vt, Pt] = calc_javp_for_segment_incr_jerk(time_now, flare_sim.tj, flare_sim.Jm, flare_sim.init.a, flare_sim.init.v, flare_sim.init.p);
-
-                    // Check if we need to progress flare state
-                    flare_sim.complete = time_now >= flare_sim.tj * 2.0;
-
-                    flare_sim.dwell.start = t;
-
-                } else if (!flare_sim.dwell.complete) {
-                    // Allow a short dwell period where the aircraft stays at the same acceleration
-                    // This matches the behavior we see in real flight
-                    const time_now = t - flare_sim.dwell.start;
-
-                    // Dont update jerk or accel
-                    const initial_V = Vt;
-                    Vt = initial_V + At * dt;
-                    Pt += initial_V * dt + 0.5 * At * dt * dt;
-
-                    flare_sim.dwell.complete = time_now >= flare_sim.dwell.time;
-
-                } else {
-                    // We may have flared too high in which case we won't have started the touch down so we need to start accelerating to our rotor drag condition
-                    const weight = mass * GRAVITY; // (N)
-                    const drag_direction = Math.sign(Vt) * -1.0; // drag always works in the opposite direction to velocity
-                    const drag_force = rotor_drag * Vt * Vt * drag_direction; // (N)
-                    const resultant_force = drag_force + weight; // (N)
-
-                    // Assume a time period that the result force resolve over
-                    const jerk_period = 0.2; // (s)
-
-                    delta_A = (resultant_force / mass) - At
-                    initial_J = Jt;
-                    Jt = delta_A / jerk_period;
-                    const initial_A = At;
-                    At = initial_A + initial_J * dt;
-                    const initial_V = Vt;
-                    Vt = initial_V + At * dt + initial_J * dt * dt;
-                    Pt += initial_V * dt + 0.5 * At * dt * dt + (1/6) * initial_J * dt * dt * dt;
-                }
-
+            } else { //INITIAL_COND
+                [Jt, At, Vt, Pt] = [0.0,
+                                    (parseFloat(document.getElementById("initial_accel").value) * -1.0) - GRAVITY, // At - Initial accel is defined in the gravity adjust +ve up frame
+                                    parseFloat(document.getElementById("initial_vel").value),   // Vt
+                                    parseFloat(document.getElementById("initial_pos").value)]   // Pt
             }
-
-
-            // Account for the change of reference frame/convention to plot the acceleration as we would expect AP to see it
-            measured_accel = (At * -1.0) + GRAVITY;
 
             let P_end;
             if (method == METHOD.TWO_PHASE.value) {
                 // Calculate the s-curve trajectory look forward position
-                [tj1, tj2] = compute_time_split(Jm, measured_accel, A2, Vt, V2)
-                const T_end = (tj1 + tj2) * 2.0;
-                [, , , P_end] = arot_calculated_s_curve(T_end, tj1, tj2, At, Vt, Pt, Jm);
+                [in_touchdown, P_end, tj1, tj2] = should_begin_touchdown(Pt, grav_adjusted_accel, Vt);
                 P_end_hist.push(P_end);
 
+                // console.log(in_touchdown)
+                // console.log(P_end)
+                // console.log(tj1)
+                // console.log(tj2)
+
             } else {
-                [tj1, tj2, jm23] = compute_trajectory_times(Jm, Am, measured_accel, Vt, V2);
+                [tj1, tj2, jm23] = compute_trajectory_times(Jm, Am, grav_adjusted_accel, Vt, V2);
                 const T_end = (tj1 + tj2 + tj2) * 2.0;
                 [, , , P_end] = arot_calculated_3phase_s_curve(T_end, tj1, tj2, At, Vt, Pt, Jm, jm23)
                 P_end_hist.push(P_end);
             }
 
-            in_touchdown = P_end <= P2;
             // keep flare init up to date
             touchdown_init.t = t;
-            touchdown_init.a = At;
+            touchdown_init.a = grav_adjusted_accel;
             touchdown_init.v = Vt;
             touchdown_init.p = Pt;
 
-        } else if (!touchdown_finished) {
+            // we may want to force the touchdown if we are in the specifiy initial conditiond mode
+            in_touchdown = in_touchdown || initial_conditions == SCENARIO.INITIAL_COND.value;
+        }
+
+        if (!touchdown_finished) {
             const flare_time = t - touchdown_init.t;
 
+            // console.log(touchdown_init.a)
+            // console.log(touchdown_init.v)
+            // console.log(touchdown_init.p)
+            // console.log(touchdown_init.t)
+
+            // console.log(Jt)
+            // console.log(At)
+            // console.log(Vt)
+            // console.log(Pt)
+            // console.log(flare_time)
+            // console.log(tj1)
+            // console.log(tj2)
+            // console.log(Jm)
+
+            [Jt, At, Vt, Pt] = update_scurve_trajectory(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm);
+            // Check if we meet the exit conditions for the flare
+            touchdown_finished = t >= touchdown_init.t + (tj1 + tj2) * 2.0;
+
+
             if (method == METHOD.TWO_PHASE.value) {
-                [Jt, At, Vt, Pt] = arot_calculated_s_curve(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm);
+                [Jt, At, Vt, Pt] = update_scurve_trajectory(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm);
                 // Check if we meet the exit conditions for the flare
                 touchdown_finished = t >= touchdown_init.t + (tj1 + tj2) * 2.0
-                
+
             } else {
                 [Jt, At, Vt, Pt] = arot_calculated_3phase_s_curve(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm, jm23)
                 // Check if we meet the exit conditions for the flare
                 touchdown_finished = t >= touchdown_init.t + (tj1 + tj2 + tj2) * 2.0
             }
-
-            // Keep account for the change of reference frame/convention to plot the acceleration as we would expect AP to see it
-            measured_accel = (At * -1.0) + GRAVITY;
 
             // Add values to keep array length correct
             P_end_hist.push(P2);
@@ -604,8 +723,15 @@ function run_sim()
         calcd_traj.a.push(At);
         calcd_traj.v.push(Vt);
         calcd_traj.p.push(Pt);
+        calcd_traj.T1.push(tj1*2);
+        calcd_traj.T2.push(tj2*2);
 
-        ap_measured_accel.push(measured_accel)
+        // Account for the change of reference frame/convention to plot the accelerations
+        imu_accel = (At + GRAVITY) * -1.0; // positive down
+        grav_adjusted_accel = -(imu_accel + GRAVITY);
+
+        ap_imu_accel.push(imu_accel)
+        ap_gravity_adjusted_accel.push(grav_adjusted_accel)
 
         // Break from simulation
         if (touchdown_finished && Pt <= 0) {
@@ -637,7 +763,7 @@ function run_sim()
     jerk_plot.data[3].y = calcd_traj.j;
     Plotly.redraw("jerk_plot");
 
-    const a_min_max = [Math.min(Math.min(...calcd_traj.a), Math.min(...ap_measured_accel)), Math.max(Math.max(...calcd_traj.a), Math.max(...ap_measured_accel))];
+    const a_min_max = [Math.min(Math.min(...calcd_traj.a), Math.min(...ap_gravity_adjusted_accel), Math.min(...ap_imu_accel)), Math.max(Math.max(...calcd_traj.a), Math.max(...ap_gravity_adjusted_accel), Math.max(...ap_imu_accel))];
     if (initial_conditions == SCENARIO.FLARING.value) {
         accel_plot.data[0].x = flare_start_time;
         accel_plot.data[0].y = a_min_max;
@@ -650,9 +776,13 @@ function run_sim()
     accel_plot.data[2].x = touchdown_end_time;
     accel_plot.data[2].y = a_min_max;
     accel_plot.data[3].x = time;
-    accel_plot.data[3].y = calcd_traj.a; // Resultant Accleration
+    accel_plot.data[3].y = ap_imu_accel; // Acceleration as we expect to see in AP's IMU log
     accel_plot.data[4].x = time;
-    accel_plot.data[4].y = ap_measured_accel; // Acceleration as we would see in AP's IMU measuremnt
+    accel_plot.data[4].y = ap_gravity_adjusted_accel; // Gravity adjusted accel as per position controls conventions
+    accel_plot.data[5].x = time;
+    accel_plot.data[5].y = calcd_traj.a; // Simulations resultant accleration
+
+    // imu_accel
     Plotly.redraw("accel_plot");
 
     const v_min_max = [Math.min(...calcd_traj.v), Math.max(...calcd_traj.v)];
@@ -689,4 +819,10 @@ function run_sim()
     pos_plot.data[4].y = P_end_hist;
     Plotly.redraw("pos_plot");
 
+
+    time_plot.data[0].x = time;
+    time_plot.data[0].y = calcd_traj.T1;
+    time_plot.data[1].x = time;
+    time_plot.data[1].y = calcd_traj.T2;
+    Plotly.redraw("time_plot");
 }
