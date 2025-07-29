@@ -384,7 +384,7 @@ function update_defaults_then_run()
     // Enable/Disable inputs based on mode
     const flare_input_ids = ["flare_accel", "flare_time_const", "flare_start_height"]
     flare_input_ids.forEach((id) => {
-        const shouldDisable = initial_conditions == SCENARIO.FLARING.value;
+        const shouldDisable = initial_conditions != SCENARIO.FLARING.value;
         setInputActive(id, shouldDisable);
     });
     
@@ -622,8 +622,13 @@ function run_sim()
     const touchdown_end_time = [touchdown_finished_time, touchdown_finished_time];
 
     const j_min_max = [Math.min(...calcd_traj.j), Math.max(...calcd_traj.j)];
-    jerk_plot.data[0].x = flare_start_time;
-    jerk_plot.data[0].y = j_min_max;
+    if (initial_conditions == SCENARIO.FLARING.value) {
+        jerk_plot.data[0].x = flare_start_time;
+        jerk_plot.data[0].y = j_min_max;
+    } else {
+        jerk_plot.data[0].x = null;
+        jerk_plot.data[0].y = null;
+    }
     jerk_plot.data[1].x = touchdown_start_time;
     jerk_plot.data[1].y = j_min_max;
     jerk_plot.data[2].x = touchdown_end_time;
@@ -633,8 +638,13 @@ function run_sim()
     Plotly.redraw("jerk_plot");
 
     const a_min_max = [Math.min(Math.min(...calcd_traj.a), Math.min(...ap_measured_accel)), Math.max(Math.max(...calcd_traj.a), Math.max(...ap_measured_accel))];
-    accel_plot.data[0].x = flare_start_time;
-    accel_plot.data[0].y = a_min_max;
+    if (initial_conditions == SCENARIO.FLARING.value) {
+        accel_plot.data[0].x = flare_start_time;
+        accel_plot.data[0].y = a_min_max;
+    } else {
+        accel_plot.data[0].x = null;
+        accel_plot.data[0].y = null;
+    }
     accel_plot.data[1].x = touchdown_start_time;
     accel_plot.data[1].y = a_min_max;
     accel_plot.data[2].x = touchdown_end_time;
@@ -646,8 +656,13 @@ function run_sim()
     Plotly.redraw("accel_plot");
 
     const v_min_max = [Math.min(...calcd_traj.v), Math.max(...calcd_traj.v)];
-    vel_plot.data[0].x = flare_start_time;
-    vel_plot.data[0].y = v_min_max;
+    if (initial_conditions == SCENARIO.FLARING.value) {
+        vel_plot.data[0].x = flare_start_time;
+        vel_plot.data[0].y = v_min_max;
+    } else {
+        vel_plot.data[0].x = null;
+        vel_plot.data[0].y = null;
+    }
     vel_plot.data[1].x = touchdown_start_time;
     vel_plot.data[1].y = v_min_max;
     vel_plot.data[2].x = touchdown_end_time;
@@ -657,8 +672,13 @@ function run_sim()
     Plotly.redraw("vel_plot");
 
     const p_min_max = [Math.min(...calcd_traj.p), Math.max(...calcd_traj.p)];
-    pos_plot.data[0].x = flare_start_time;
-    pos_plot.data[0].y = p_min_max;
+    if (initial_conditions == SCENARIO.FLARING.value) {
+        pos_plot.data[0].x = flare_start_time;
+        pos_plot.data[0].y = p_min_max;
+    } else {
+        pos_plot.data[0].x = null
+        pos_plot.data[0].y = null
+    }
     pos_plot.data[1].x = touchdown_start_time;
     pos_plot.data[1].y = p_min_max;
     pos_plot.data[2].x = touchdown_end_time;
