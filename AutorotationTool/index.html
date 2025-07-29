@@ -46,7 +46,7 @@
 
 <h1><a href="" style="color: #000000; text-decoration:none;">Autorotation Touch Down Trajectory Tool</a></h1>
 
-<body onload="initial_load(); update_defaults_then_run()">
+<body onload="initial_load(); update_defaults_then_run();">
 <table>
   <tr>
     <td>
@@ -83,12 +83,17 @@
         </legend>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="initial_vel" value="0" min="-20" step="0.5" max="+20" style="width: 50px" onchange="run_sim()">
+          <input type="number" id="initial_accel" value="-3.0" min="-20" step="0.5" max="+20" style="width: 50px" onchange="run_sim()">
+          <label for="initial_accel">Accel (m/s) (V0)</label>
+        </p>
+
+        <p style="margin-top:5px; margin-bottom:5px;">
+          <input type="number" id="initial_vel" value="-0.3" min="-20" step="0.5" max="+20" style="width: 50px" onchange="run_sim()">
           <label for="initial_vel">Velocity (m/s) (V0)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="initial_pos" value="8" min="0.5" step="0.5" max="500" style="width: 50px" onchange="run_sim()">
+          <input type="number" id="initial_pos" value="8.5" min="0.5" step="0.5" max="500" style="width: 50px" onchange="run_sim()">
           <label for="initial_pos">Position (m) (P0)</label>
         </p>
 
@@ -149,13 +154,18 @@
         </p> -->
 
         <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="max_jerk" value="50" min="1.0" step="0.5" max="30" style="width: 50px" onchange="run_sim()">
+          <input type="number" id="max_jerk" value="3.5" min="1.0" step="0.5" max="30" style="width: 50px" onchange="run_sim()">
           <label for="max_jerk">Max Jerk Mag (m/s³)</label>
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
           <input type="number" id="max_vert_accel" value="20" min="1.0" step="0.1" max="40" style="width: 50px" onchange="run_sim()">
           <label for="max_vert_accel">Max Accel Mag (m/s²)</label>
+        </p>
+
+        <p style="margin-top:5px; margin-bottom:5px;">
+          <input type="number" id="touchdown_max_height" value="20" min="0.0" step="0.1" max="40" style="width: 50px" onchange="run_sim()">
+          <label for="touchdown_max_height">Touchdown Max Height (m)</label>
         </p>
 
       </fieldset>
@@ -202,7 +212,7 @@
 <div id="accel_plot" class="plotClass"></div>
 <div id="vel_plot" class="plotClass"></div>
 <div id="pos_plot" class="plotClass"></div>
-
+<div id="time_plot" class="plotClass"></div>
 
 <script>
 
