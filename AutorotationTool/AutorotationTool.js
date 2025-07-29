@@ -374,7 +374,6 @@ function should_begin_touchdown(hagl, a0, v0)
 
     } else {
         throw new Error ('tj1 or tj2 not positive');
-        return [false, null, null, null];
     }
 
     return [trajectory_check, future_pos, tj1, tj2];
@@ -628,6 +627,8 @@ function run_sim()
     // Run simulation
     while (t < 100.0) {
 
+
+        let P_end;
         if (!in_touchdown) {
 
             if (initial_conditions == SCENARIO.HOVER_AUTOROTATION.value) {
@@ -643,23 +644,9 @@ function run_sim()
                                     parseFloat(document.getElementById("initial_pos").value)]   // Pt
             }
 
-            let P_end;
-            if (method == METHOD.TWO_PHASE.value) {
-                // Calculate the s-curve trajectory look forward position
-                [in_touchdown, P_end, tj1, tj2] = should_begin_touchdown(Pt, grav_adjusted_accel, Vt);
-                P_end_hist.push(P_end);
-
-                // console.log(in_touchdown)
-                // console.log(P_end)
-                // console.log(tj1)
-                // console.log(tj2)
-
-            } else {
-                [tj1, tj2, jm23] = compute_trajectory_times(Jm, Am, grav_adjusted_accel, Vt, V2);
-                const T_end = (tj1 + tj2 + tj2) * 2.0;
-                [, , , P_end] = arot_calculated_3phase_s_curve(T_end, tj1, tj2, At, Vt, Pt, Jm, jm23)
-                P_end_hist.push(P_end);
-            }
+            // Calculate the s-curve trajectory look forward position
+            [in_touchdown, P_end, tj1, tj2] = should_begin_touchdown(Pt, grav_adjusted_accel, Vt);
+            P_end_hist.push(P_end);
 
             // keep flare init up to date
             touchdown_init.t = t;
@@ -669,40 +656,13 @@ function run_sim()
 
             // we may want to force the touchdown if we are in the specifiy initial conditiond mode
             in_touchdown = in_touchdown || initial_conditions == SCENARIO.INITIAL_COND.value;
-        }
 
-        if (!touchdown_finished) {
+        } else if (!touchdown_finished) {
             const flare_time = t - touchdown_init.t;
-
-            // console.log(touchdown_init.a)
-            // console.log(touchdown_init.v)
-            // console.log(touchdown_init.p)
-            // console.log(touchdown_init.t)
-
-            // console.log(Jt)
-            // console.log(At)
-            // console.log(Vt)
-            // console.log(Pt)
-            // console.log(flare_time)
-            // console.log(tj1)
-            // console.log(tj2)
-            // console.log(Jm)
 
             [Jt, At, Vt, Pt] = update_scurve_trajectory(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm);
             // Check if we meet the exit conditions for the flare
             touchdown_finished = t >= touchdown_init.t + (tj1 + tj2) * 2.0;
-
-
-            if (method == METHOD.TWO_PHASE.value) {
-                [Jt, At, Vt, Pt] = update_scurve_trajectory(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm);
-                // Check if we meet the exit conditions for the flare
-                touchdown_finished = t >= touchdown_init.t + (tj1 + tj2) * 2.0
-
-            } else {
-                [Jt, At, Vt, Pt] = arot_calculated_3phase_s_curve(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm, jm23)
-                // Check if we meet the exit conditions for the flare
-                touchdown_finished = t >= touchdown_init.t + (tj1 + tj2 + tj2) * 2.0
-            }
 
             // Add values to keep array length correct
             P_end_hist.push(P2);
