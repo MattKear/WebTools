@@ -97,7 +97,6 @@ function initial_load()
     Plotly.purge(plot)
     Plotly.newPlot(plot, pos_plot.data, pos_plot.layout, { displaylogo: false })
 
-
     // Link all time axis
     link_plot_axis_range([
         ["jerk_plot", "x", "", jerk_plot],
@@ -113,36 +112,25 @@ function initial_load()
         ["vel_plot", vel_plot],
         ["pos_plot", pos_plot],
     ])
-}
 
-function update_mode(params)
-{
+    // Populate dropdown boxes
+    // Selected method
+    const sel = document.getElementById('method_select');
+    Object.values(METHOD).forEach(({value, label}) => {
+        const o = document.createElement('option');
+        o.value       = value;
+        o.textContent = label;
+        sel.appendChild(o);
+    });
 
-    // Enable all
-    for (const id of Object.values(params)) {
-        document.getElementById(id).disabled = false
-    }
-    document.getElementById("ATC_INPUT_TC").disabled = false
-    document.getElementById("desired_pos").disabled = false
-    document.getElementById("desired_vel").disabled = false
-
-
-    const mode = document.querySelector('input[name="mode"]:checked').value
-    switch (mode) {
-        case "angle":
-            document.getElementById(params.rate_tc).disabled = true
-            document.getElementById("desired_vel").disabled = true
-            return { use_pos: true, use_vel: false }
-
-        case "rate":
-            document.getElementById("ATC_INPUT_TC").disabled = true
-            document.getElementById("desired_pos").disabled = true
-            return { use_pos: false, use_vel: true }
-
-        case "angle+rate":
-            document.getElementById(params.rate_tc).disabled = true
-            return { use_pos: true, use_vel: true }
-    }
+    // Selected simulation scenario
+    const sel2 = document.getElementById('initial_conditions_select');
+    Object.values(SCENARIO).forEach(({value, label}) => {
+        const o = document.createElement('option');
+        o.value       = value;
+        o.textContent = label;
+        sel2.appendChild(o);
+    });
 }
 
 function radians(deg)
@@ -345,19 +333,54 @@ class Trajectory
     }
 }
 
+function setInputActive(id, shouldDisable) {
+    const input = document.getElementById(id);
+    if (!input) return;
+
+    const label = document.querySelector(`label[for="${id}"]`);
+
+    // 1) disable it (makes it non‑interactive and grey by default)
+    input.disabled = shouldDisable;
+
+    // 2) optional: tweak appearance for more visual feedback
+    if (shouldDisable) {
+        input.style.backgroundColor = '#f0f0f0';
+        input.style.opacity = '0.6';
+        input.style.cursor = 'not-allowed';
+        label.style.color = '#636060ff';
+    } else {
+        input.style.backgroundColor = '';
+        input.style.opacity = '';
+        input.style.cursor = '';
+        label.style.color = '';
+    }
+}
+
 // When we change the simulation mode, for convenience we update some of the starting values of the inputs
 // then we run the simulation
 function update_defaults_then_run()
 {
-     if (document.getElementById("initial_conditions_cb").checked) {
+    let initial_conditions = parseFloat(document.getElementById("initial_conditions_select").value)
+     if (initial_conditions == SCENARIO.FLARING.value) {
         // Set default values for flare simulation
         document.getElementById("initial_vel").value = -11.0;
         document.getElementById("initial_pos").value = 50.0;
     } else {
         // Set default values for hover autorotation simulation
-        document.getElementById("initial_vel").value = 0.0;
-        document.getElementById("initial_pos").value = 8.0;
+        document.getElementById("initial_vel").value = -0.3;
+        document.getElementById("initial_pos").value = 8.5;
     }
+
+
+    // Enable/Disable inputs based on mode
+    const flare_input_ids = ["flare_accel", "flare_time_const", "flare_start_height"]
+    flare_input_ids.forEach((id) => {
+        const shouldDisable = initial_conditions == SCENARIO.FLARING.value;
+        setInputActive(id, shouldDisable);
+    });
+    
+
+
     run_sim();
 }
 
@@ -420,27 +443,20 @@ function run_sim()
     flare_sim.Jm = flare_sim.Am / flare_sim.tj;
 
     // Identify which method we are using to calculate the trajectory
-    const TWO_PHASE_METHOD = 0;
-    const THREE_PHASE_METHOD = 1;
-    let method;
-    if (document.getElementById("method_cb").checked) {
+    let method = parseFloat(document.getElementById("method_select").value)
+    if (method == METHOD.THREE_PHASE.value) {
         console.log("Three Phase Method Selected");
-        method = THREE_PHASE_METHOD
     } else {
         console.log("Two Phase Method Selected");
-        method = TWO_PHASE_METHOD
     }
 
     // Identify which initial conditions we are using
-    const HOVER_AUTOROTATION = 0;
-    const FLARING = 1;
-    let initial_conditions;
-    if (document.getElementById("initial_conditions_cb").checked) {
+
+    let initial_conditions = parseFloat(document.getElementById("initial_conditions_select").value)
+    if (initial_conditions == SCENARIO.FLARING.value) {
         console.log("Flare Initial Conditions Selected");
-        initial_conditions = FLARING;
     } else {
         console.log("Hover Autorotation Conditions Selected");
-        initial_conditions = HOVER_AUTOROTATION;
     }
 
     let measured_accel;
@@ -450,19 +466,7 @@ function run_sim()
 
         if (!in_touchdown) {
 
-            if (initial_conditions == HOVER_AUTOROTATION) {
-                // Crude simulation of heli in hover autorotation
-                const weight = mass * GRAVITY; // (N)
-                const drag_direction = Math.sign(Vt) * -1.0; // drag always works in the opposite direction to velocity
-                const drag_force = rotor_drag * Vt * Vt * drag_direction; // (N)
-                const resultant_force = drag_force + weight; // (N)
-
-                // Assume constant accel/zero jerk
-                Jt = 0.0;
-                At = resultant_force / mass;
-                const initial_V = Vt;
-                Vt = initial_V + At * dt;
-                Pt += initial_V * dt + 0.5 * At * dt * dt;
+            if (initial_conditions == SCENARIO.HOVER_AUTOROTATION.value) {
 
             } else {
                 // Crude simulation starting from steady state glide and flaring 
@@ -534,7 +538,7 @@ function run_sim()
             measured_accel = (At * -1.0) + GRAVITY;
 
             let P_end;
-            if (method == TWO_PHASE_METHOD) {
+            if (method == METHOD.TWO_PHASE.value) {
                 // Calculate the s-curve trajectory look forward position
                 [tj1, tj2] = compute_time_split(Jm, measured_accel, A2, Vt, V2)
                 const T_end = (tj1 + tj2) * 2.0;
@@ -558,7 +562,7 @@ function run_sim()
         } else if (!touchdown_finished) {
             const flare_time = t - touchdown_init.t;
 
-            if (method == TWO_PHASE_METHOD) {
+            if (method == METHOD.TWO_PHASE.value) {
                 [Jt, At, Vt, Pt] = arot_calculated_s_curve(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm);
                 // Check if we meet the exit conditions for the flare
                 touchdown_finished = t >= touchdown_init.t + (tj1 + tj2) * 2.0
