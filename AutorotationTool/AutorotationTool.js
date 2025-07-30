@@ -9,9 +9,9 @@ const METHOD = {
 };
 
 const SCENARIO = {
-    HOVER_AUTOROTATION: {value: 0, label:"Hover Autorotation"},
-    FLARING:            {value: 1, label:"Flare Phase"},
-    INITIAL_COND:       {value: 2, label:"Specified Conditions"},
+    INITIAL_COND:       {value: 0, label:"Specified Conditions"},
+    HOVER_AUTOROTATION: {value: 1, label:"Hover Autorotation"},
+    FLARING:            {value: 2, label:"Flare Phase"},
 };
 
 pos_plot = {};
@@ -19,6 +19,7 @@ vel_plot = {};
 accel_plot = {};
 jerk_plot = {};
 time_plot = {};
+headspeed_plot = {};
 function initial_load()
 {
     const time_scale_label = "Time (s)";
@@ -134,6 +135,28 @@ function initial_load()
     Plotly.purge(plot)
     Plotly.newPlot(plot, time_plot.data, time_plot.layout, { displaylogo: false })
 
+    // Rotor headspeed
+    headspeed_plot.data = [{ x:[], y:[], name: 'RPM', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" }]
+
+    headspeed_plot.layout = {
+        legend: { itemclick: false, itemdoubleclick: false, x: 0.85},
+        margin: { b: 50, l: 60, r: 0, t: 20 },
+        xaxis: { title: {text: time_scale_label } },
+        yaxis: { title: {text: "Estimate Head Speed" } },
+        shapes: [{
+            type: 'line',
+            line: { dash: "dot" },
+            xref: 'paper',
+            x0: 0,
+            x1: 1,
+            visible: false,
+        }]
+    }
+
+    plot = document.getElementById("headspeed_plot")
+    Plotly.purge(plot)
+    Plotly.newPlot(plot, headspeed_plot.data, headspeed_plot.layout, { displaylogo: false })
+
 
     // Link all time axis
     link_plot_axis_range([
@@ -142,6 +165,7 @@ function initial_load()
         ["vel_plot", "x", "", vel_plot],
         ["pos_plot", "x", "", pos_plot],
         ["time_plot", "x", "", time_plot],
+        ["headspeed_plot", "x", "", headspeed_plot],
     ])
 
     // Link plot reset
@@ -151,6 +175,7 @@ function initial_load()
         ["vel_plot", vel_plot],
         ["pos_plot", pos_plot],
         ["time_plot", time_plot],
+        ["headspeed_plot", headspeed_plot],
     ])
 
     // Populate dropdown boxes
@@ -181,6 +206,16 @@ function radians(deg)
 function degrees(rad)
 {
     return rad * (180/M_PI)
+}
+
+function rpm_to_rads(rpm)
+{
+    return (rpm / 60) * M_2PI
+}
+
+function rads_to_rpm(rads)
+{
+    return rads / M_2PI * 60
 }
 
 function is_positive(x)
@@ -624,6 +659,14 @@ function run_sim()
     let imu_accel = (At + GRAVITY) * -1.0; // positive down
     let grav_adjusted_accel = -(imu_accel + GRAVITY);
 
+    // Head speed model variables
+    const blade_inertia = parseFloat(document.getElementById("blade_inertia").value);
+    const nBlades = parseFloat(document.getElementById("n_blades").value);
+    const rotor_head_inertia = blade_inertia * nBlades;
+    let headspeed_rpm = parseFloat(document.getElementById("initial_rpm").value);
+    let head_energy = 0.5 * rotor_head_inertia * rpm_to_rads(headspeed_rpm)**2;
+    let headspeed_hist = [];
+
     // Run simulation
     while (t < 100.0) {
 
@@ -677,6 +720,36 @@ function run_sim()
             Pt += initial_V * dt + 0.5 * At * dt * dt;
         }
 
+        // Update approximation of headspeed/energy model (only for case when initial conditions are prescribed)
+        if (initial_conditions == SCENARIO.INITIAL_COND.value) {
+
+            const chord = parseFloat(document.getElementById("chord").value);
+            const rotor_rad = parseFloat(document.getElementById("rotor_radius").value);
+            const solidity = (nBlades * chord) / ( M_PI * rotor_rad)
+            const mass = parseFloat(document.getElementById("mass").value);
+            const rotor_area = M_PI * rotor_rad ** 2;
+
+            // Calculate the coefficient of thrust needed for the required accel
+            const resultant_force = imu_accel * -1.0 * mass;
+            const CT = resultant_force / (DENSITY * rotor_area * rotor_rad**2 * rpm_to_rads(headspeed_rpm)**2);
+
+            // Compute power required
+            const k = parseFloat(document.getElementById("induced_power_factor").value);
+            const cd0 = parseFloat(document.getElementById("blade_cd0").value);
+            const Cp = (k * CT ** (3/2)) / safe_sqrt(2) + (solidity * cd0) / 8.0;
+            const power_required = Cp * DENSITY * rotor_area * rotor_rad**3 * rpm_to_rads(headspeed_rpm)**3;
+
+            // update the remaining energy in the head
+            head_energy -= power_required * dt;
+            // Constrain energy to min 0
+            head_energy = Math.max(head_energy, 0.0);
+
+            // From remaining energy approximate the new headspeed
+            headspeed_rpm = rads_to_rpm(safe_sqrt(head_energy / (0.5 * rotor_head_inertia)));
+            headspeed_hist.push(headspeed_rpm)
+
+            // headspeed_hist.push(rpm_to_rads(headspeed_rpm))
+        }
 
         time.push(t)
         calcd_traj.j.push(Jt);
@@ -785,4 +858,8 @@ function run_sim()
     time_plot.data[1].x = time;
     time_plot.data[1].y = calcd_traj.T2;
     Plotly.redraw("time_plot");
+
+    headspeed_plot.data[0].x = time;
+    headspeed_plot.data[0].y = headspeed_hist;
+    Plotly.redraw("headspeed_plot");
 }
