@@ -136,7 +136,8 @@ function initial_load()
     Plotly.newPlot(plot, time_plot.data, time_plot.layout, { displaylogo: false })
 
     // Rotor headspeed
-    headspeed_plot.data = [{ x:[], y:[], name: 'RPM', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" }]
+    headspeed_plot.data = [{ x:[], y:[], name: 'Touchdown End', mode: 'lines', line: {dash: 'dash'}, hoverinfo: 'skip' },
+                           { x:[], y:[], name: 'RPM', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} RPM" }]
 
     headspeed_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false, x: 0.85},
@@ -739,16 +740,17 @@ function run_sim()
             const Cp = (k * CT ** (3/2)) / safe_sqrt(2) + (solidity * cd0) / 8.0;
             const power_required = Cp * DENSITY * rotor_area * rotor_rad**3 * rpm_to_rads(headspeed_rpm)**3;
 
+            // We gain some energy from descending
+            let power_in = resultant_force * Vt * -1.0; // -1 so that we have +ve power in to descend and -ve to climb
+
             // update the remaining energy in the head
-            head_energy -= power_required * dt;
+            head_energy += (power_in - power_required)  * dt;
             // Constrain energy to min 0
             head_energy = Math.max(head_energy, 0.0);
 
             // From remaining energy approximate the new headspeed
             headspeed_rpm = rads_to_rpm(safe_sqrt(head_energy / (0.5 * rotor_head_inertia)));
             headspeed_hist.push(headspeed_rpm)
-
-            // headspeed_hist.push(rpm_to_rads(headspeed_rpm))
         }
 
         time.push(t)
@@ -859,7 +861,10 @@ function run_sim()
     time_plot.data[1].y = calcd_traj.T2;
     Plotly.redraw("time_plot");
 
-    headspeed_plot.data[0].x = time;
-    headspeed_plot.data[0].y = headspeed_hist;
+    const hs_min_max = [Math.min(...headspeed_hist), Math.max(...headspeed_hist)];
+    headspeed_plot.data[0].x = touchdown_end_time;
+    headspeed_plot.data[0].y = hs_min_max;
+    headspeed_plot.data[1].x = time;
+    headspeed_plot.data[1].y = headspeed_hist;
     Plotly.redraw("headspeed_plot");
 }
