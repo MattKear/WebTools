@@ -2,6 +2,8 @@
 
 ---
 
+## Deriving expressions for Acceleration, Position, and Velocity
+
 Starting with a raised cosine jerk profile $(J(t))$, integrate to derive the acceleration, velocity, and position, accounting for the constants obtained from initial conditions $a_{0}, \, v_{0}, \, p_{0}$:
 
 $$
@@ -92,7 +94,7 @@ $$
 
 ---
 
-**Summary**
+### Summary
 
 $$
 a(t)=a_0 +\alpha\Bigl(t - \tfrac{1}{\beta}\sin(\beta t)\Bigr),
@@ -105,6 +107,8 @@ p(t)=p_0 + v_0 t + a_0 \tfrac{t^2}{2} + \alpha\Bigl(\tfrac{t^3}{6} - \tfrac{t}{\
 $$
 
 ---
+
+## Developing a Trajectory for the Autorotation Touchdown
 
 Assuming that the trajectory can be flown across two distinct phases:
 - **Phase 1**: A positive jerk phase, in which  $0 <= t <= T_{1}$, where $T1 = 2 t_{j1}$, and $t_{j1}$ is the cosine time period of phase 1.
@@ -141,9 +145,10 @@ $$
 Because $T_{1}=2\,t_{j1}$, the acceleration and velocity equations at $T_{1}$ simplify to become:
 
 $$
-a_1=a(T_{1})=a_0+j_m\,t_{j1},
-\\
-v_1=v(T_{1})=v_0+2\,a_0\,t_{j1}+j_m\,t_{j1}^2.
+    a_1=a(T_{1})=a_0+j_m\,t_{j1}, \tag{1}
+$$
+$$
+v_1=v(T_{1})=v_0+2\,a_0\,t_{j1}+j_m\,t_{j1}^2. \tag{2}
 $$
 
 ---
@@ -159,51 +164,126 @@ $$
 Similarly, because $T_{2}=2\,t_{j2}$, the acceleration and velocity equations at $T_{2}$ simplify to become::
 
 $$
-a_2=a_1-j_m\,t_{j2},
-\\
-v_2=v_1+2\,a_1\,t_{j2}-j_m\,t_{j2}^2.
+a_2=a_1-j_m\,t_{j2}, \tag{3}
+$$
+$$
+v_2=v_1+2\,a_1\,t_{j2}-j_m\,t_{j2}^2. \tag{4}
 $$
 
 ---
 
 ### Enforcing end‑conditions
 
-Ensure acceleration continuity:
+#### Acceleration Continuity:
+
+Ensure acceleration continuity. From (1):
 
 $$
-a_2=a_1-j_m\,t_{j2}\implies t_{j2}=\frac{a_1-a_2}{j_m}=t_{j1}+\frac{a_0-a_2}{j_m}.
+a_2=a_1-j_m\,t_{j2}\implies t_{j2}=\frac{a_1-a_2}{j_m}.
 $$
 
-Ensure velocity continuity:
+Rearranging (3) to obtain an expression for $a_{1}$:
 
 $$
-v_2=v_1+2\,a_1\,t_{j2}-j_m\,t_{j2}^2
+a_1 = a_2 + j_m\,t_{j2}
 $$
 
-Substitution of acceleration continuity into velocity continuity:
+which is equal to (1):
 
 $$
-a_1=a_0+j_m\,t_{j1},
-v_1=v_0+2\,a_0\,t_{j1}+j_m\,t_{j1}^2,
-t_{j2}=t_{j1}+\frac{a_0-a_2}{j_m}.
+a_0 + j_m\,t_{j1} = a_2 + j_m\,t_{j2}
 $$
 
-Expand all terms, collect like powers of $t_{j1}$, cancel, define
+rearranges and simplifies to get:
+
+$$
+t_{j2} = t_{j1}+\frac{a_0-a_2}{j_m} \tag{5}
+$$
+
+#### Velocity Continuity:
+
+Ensuring velocity continuity, rearrange (4) to get an expression for $v_{1}$:
+
+$$
+v_1 = v_2 -2\,a_1\,t_{j2} + j_m\,t_{j2}^2.
+$$
+
+This is equal to (2):
+
+$$
+v_2 -2\,a_1\,t_{j2} + j_m\,t_{j2}^2 = v_0 + 2\,a_0\,t_{j1} + j_m\,t_{j1}^2
+$$
+
+$$
+v_2 - v_0 - 2\,a_1\,t_{j2} + j_m\,t_{j2}^2 - 2\,a_0\,t_{j1} - j_m\,t_{j1}^2 = 0 \tag{6}
+$$
+
+Substitution of (5) into (6):
+
+$$
+v_2 - v_0 - 2\,a_1 \left( t_{j1}+\frac{a_0-a_2}{j_m}\right) + j_m \left( t_{j1}+\frac{a_0-a_2}{j_m}\right)^2 - 2\,a_0\,t_{j1} - j_m\,t_{j1}^2 = 0
+$$
+
+defining:
 
 $$
 \Delta v=v_2-v_0,\quad \Delta a=a_0-a_2,
 $$
 
-Multiply through by $j_m$, note
+and substitution to yield:
 
 $$
-2a_0\Delta a - \Delta a^2 = a_0^2 - a_2^2,
+\Delta v - 2\,a_1 \left( t_{j1}+\frac{\Delta a}{j_m}\right) + j_m \left( t_{j1}+\frac{\Delta a}{j_m}\right)^2 - 2\,a_0\,t_{j1} - j_m\,t_{j1}^2 = 0
 $$
 
-yielding the quadratic in $t_{j1}$
+$$
+\Delta v - 2\,a_1\,t_{j1} - 2\,a_1\,\frac{\Delta a}{j_m} + j_m \left(t_{j1}^2 + 2\,t_{j1}\,\frac{\Delta a}{j_m} + \frac{\Delta a^2}{j_m^2}\right) - 2\,a_0\,t_{j1} - j_m\,t_{j1}^2 = 0
+$$
 
 $$
-2\,j_m^2\,t_{j1}^2 + 4\,a_0\,j_m\,t_{j1} + (a_0^2 - a_2^2 - j_m(v_2 - v_0)) = 0.
+\Delta v - 2\,a_1\,t_{j1} - 2\,a_1\,\frac{\Delta a}{j_m} +  j_m\,t_{j1}^2 + 2\,t_{j1}\,\Delta a + \frac{\Delta a^2}{j_m} - 2\,a_0\,t_{j1} - j_m\,t_{j1}^2 = 0
+$$
+
+Multiply through by $j_m$ and simplify:
+
+$$
+\Delta v \, j_m - 2\,a_1\,j_m\,t_{j1} - 2\,a_1\,\Delta a +  j_m^2\,t_{j1}^2 + 2\,j_m\,t_{j1}\,\Delta a + \Delta a^2 - 2\,j_m\,a_0\,t_{j1} - j_m^2\,t_{j1}^2 = 0
+$$
+
+$$
+\Delta v \, j_m - 2\,a_1\,\Delta a - 2\,a_1\,j_m\,t_{j1} + 2\,j_m\,t_{j1}\,\Delta a + \Delta a^2 - 2\,j_m\,a_0\,t_{j1} = 0
+$$
+
+substitute in (1) and expand:
+
+$$
+\Delta v \, j_m - 2\,\Delta a\,(a_0+j_m\,t_{j1}) - 2\,j_m\,t_{j1}\,(a_0+j_m\,t_{j1}) + 2\,j_m\,t_{j1}\,\Delta a + \Delta a^2 - 2\,j_m\,a_0\,t_{j1} = 0
+$$
+
+$$
+\Delta v \, j_m - 2\,\Delta a\,a_0 - 2\,\Delta a\,j_m\,t_{j1} - 2\,j_m\,t_{j1}\,a_0 - 2\,j_m^2\,t_{j1}^2 + 2\,j_m\,t_{j1}\,\Delta a + \Delta a^2 - 2\,j_m\,a_0\,t_{j1} = 0
+$$
+
+Multiply by $-1$ and Simplify:
+
+$$
+2\,j_m^2\,t_{j1}^2 + 4\,a_0\,j_m\,t_{j1} + 2\,a_0\,\Delta a - \Delta a^2 - \Delta v \, j_m= 0
+$$
+
+Noting that $2\,a_0\,\Delta a - \Delta a^2 = a_0^2 - a_2^2$, yielding the quadratic in $t_{j1}$:
+
+$$
+2\,j_m^2\,t_{j1}^2 + 4\,a_0\,j_m\,t_{j1} +  = 0
+$$
+
+$$
+A = 2\,j_m^2
+$$
+$$
+B = 4\,a_0\,j_m
+$$
+$$
+C = a_0^2 - a_2^2 - j_m \, (v_2 - v_0)
 $$
 
 Solve for the positive root to get:
