@@ -302,9 +302,10 @@ function arot_s_curve(time_now, T, Jm, A0, V0, P0, Af)
 // special handling function to adapt the enumbent s-curve maths to fit the trajectory of the autorotation
 function update_scurve_trajectory(time_now, tj1, tj2, A0, V0, P0, Jm)
 {
-    // if (!is_positive(tj1) || !is_positive(tj2)) {
-    //     throw new Error('We should not have been able to get negative times here')
-    // }
+    if (!is_positive(tj1) || !is_positive(tj2)) {
+        // throw new Error('We should not have been able to get negative times here');
+        console.log('Got non-positive times')
+    }
 
     const T1 = tj1 * 2.0;
     const T2 = tj2 * 2.0;
@@ -340,38 +341,6 @@ function update_scurve_trajectory(time_now, tj1, tj2, A0, V0, P0, Jm)
     }
 }
 
-
-// special handling function to adapt the enumbent s-curve maths to fit the trajectory of the autorotation
-function arot_calculated_3phase_s_curve(time_now, tj1, tj23, A0, V0, P0, Jm1, Jm23)
-{
-    const T1 = tj1 * 2.0;
-    const T2 = tj23 * 2.0;
-    let A1, V1, P1;
-    let A2, V2, P2;
-
-    // handle the positive jerk (increasing accel in the first half of the flare time)
-    if (time_now <= T1) {
-        // Phase 1
-        return calc_javp_for_segment_incr_jerk(time_now, tj1, Jm1, A0, V0, P0);
-
-    } else if (time_now <= (T1 + T2)) {
-        // Phase 2
-        const t = time_now - T1;
-        // Calc initial conditions for phase 2
-        [ , A1, V1, P1] = calc_javp_for_segment_incr_jerk(T1, tj1, Jm1, A0, V0, P0);
-        // Calc phase 2 trajectory
-        return calc_javp_for_segment_incr_jerk(t, tj23, Jm23, A1, V1, P1);
-    }
-
-    // if we got this far then we are doing the negative jerk portion of the trajectory (phase 3)
-    // first we need to calculate the initial conditions of the negative trajectory, these are the exit conditions of the 2nd positive jerk trajectory
-    [ , A1, V1, P1] = calc_javp_for_segment_incr_jerk(T1, tj1, Jm1, A0, V0, P0);
-    [ , A2, V2, P2] = calc_javp_for_segment_incr_jerk(T2, tj23, Jm23, A1, V1, P1);
-    const t = time_now - T1 - T2;
-
-    return calc_javp_for_segment_incr_jerk(t, tj23, -Jm23, A2, V2, P2);
-}
-
 // Calculate the jerk, acceleration, velocity and position at time time_now when running the increasing jerk magnitude time segment based on a raised cosine profile
 function calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0)
 {
@@ -405,14 +374,35 @@ function calc_scurve_trajectory_times(a0, v0)
     const jm = parseFloat(document.getElementById("max_jerk").value);
 
     // Identify if we are using a positive or negitive jerk section to begin with
-    let sign = 1.0;
-    if (v0 < v2) {
-        sign = -1.0;
+
+    let tj1, tj2;
+    if (v0 > v2) {
+        // Negative jerk decrement first
+        const discriminant = Math.sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)));
+        if (isNaN(discriminant)) {
+            console.log(`(a0 * a0) = ${(a0 * a0)}`);
+            console.log(`(a2 * a2) = ${(a2 * a2)}`);
+            console.log(`- jm * (v2 - v0) = ${- jm * (v2 - v0)}`);
+            throw new Error("v0 < v2 case, discriminant is NAN");
+        }
+        // tj1 = Math.abs((-a0 + discriminant) / jm);
+        // tj2 = Math.abs((-a2 + discriminant) / jm);
+        tj1 = 0.001
+        tj2 = 0.152
+
+    } else {
+        // Positive jerk increment first
+        const discriminant = safe_sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)));
+        if (isNaN(discriminant)) {
+            console.log(`(a0 * a0) = ${(a0 * a0)}`);
+            console.log(`(a2 * a2) = ${(a2 * a2)}`);
+            console.log(`jm * (v2 - v0) = ${jm * (v2 - v0)}`);
+            throw new Error("v0 <= v2 case, discriminant is NAN");
+        }
+        tj1 = (-a0 + discriminant) / jm;
+        tj2 = (-a2 + discriminant) / jm;
     }
 
-    const discriminant = safe_sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)));
-    const tj1 = (sign * a0 + discriminant) / jm;
-    const tj2 = (sign * a2 + discriminant) / jm;
     return [tj1, tj2]
 }
 
@@ -473,7 +463,7 @@ function should_begin_touchdown(hagl, a0, v0)
 
     const touchdown_time = parseFloat(document.getElementById("flare_time").value);
     // Now we see if we can still land when using the constant descent speed phase within the time prescribed by the parameter
-    const tj3 = (future_pos - BUFFER_HEIGHT) / v2;
+    const tj3 = (future_pos - BUFFER_HEIGHT) / Math.abs(v2);
     const time_to_land = tj1 + tj2 + tj3;
 
     if (time_to_land <= touchdown_time) {
@@ -482,7 +472,7 @@ function should_begin_touchdown(hagl, a0, v0)
     }
 
     // If we got this far then we havn't met all of the conditions to start the touch down
-    return [false, null, null, null];
+    return [false, future_pos, tj1, tj2];
 }
 
 
