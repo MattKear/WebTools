@@ -114,7 +114,9 @@ function initial_load()
 
     // trajectory time periods
     time_plot.data = [{ x:[], y:[], name: 'T1', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" },
-                     { x:[], y:[], name: 'T2', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" }]
+                      { x:[], y:[], name: 'T2', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" },
+                      { x:[], y:[], name: 'T3', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" },
+                      { x:[], y:[], name: 'Total', mode: 'lines', hovertemplate: "<extra></extra>%{x:.2f} s<br>%{y:.2f} s" }]
 
     time_plot.layout = {
         legend: { itemclick: false, itemdoubleclick: false, x: 0.85},
@@ -369,41 +371,35 @@ function calc_javp_for_segment_const_jerk(time_now, J0, A0, V0, P0)
 
 function calc_scurve_trajectory_times(a0, v0)
 {
-    const v2 = parseFloat(document.getElementById("final_vel").value);
-    const a2 = parseFloat(document.getElementById("final_accel").value);
+    const v3 = parseFloat(document.getElementById("final_vel").value);
+    const a3 = parseFloat(document.getElementById("final_accel").value);
     const jm = parseFloat(document.getElementById("max_jerk").value);
+    const am = parseFloat(document.getElementById("max_vert_accel").value);
 
     // Identify if we are using a positive or negitive jerk section to begin with
 
-    let tj1, tj2;
-    if (v0 > v2) {
-        // Negative jerk decrement first
-        const discriminant = Math.sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)));
-        if (isNaN(discriminant)) {
-            console.log(`(a0 * a0) = ${(a0 * a0)}`);
-            console.log(`(a2 * a2) = ${(a2 * a2)}`);
-            console.log(`- jm * (v2 - v0) = ${- jm * (v2 - v0)}`);
-            throw new Error("v0 < v2 case, discriminant is NAN");
-        }
-        // tj1 = Math.abs((-a0 + discriminant) / jm);
-        // tj2 = Math.abs((-a2 + discriminant) / jm);
-        tj1 = 0.001
-        tj2 = 0.152
+    let tj1, tj2, tj3;
 
-    } else {
-        // Positive jerk increment first
-        const discriminant = safe_sqrt(0.5 * ((a0 * a0) + (a2 * a2) + jm * (v2 - v0)));
-        if (isNaN(discriminant)) {
-            console.log(`(a0 * a0) = ${(a0 * a0)}`);
-            console.log(`(a2 * a2) = ${(a2 * a2)}`);
-            console.log(`jm * (v2 - v0) = ${jm * (v2 - v0)}`);
-            throw new Error("v0 <= v2 case, discriminant is NAN");
-        }
-        tj1 = (-a0 + discriminant) / jm;
-        tj2 = (-a2 + discriminant) / jm;
+    // Calculate the time periods required to meet the acceleration boundary conditions
+    tj1 = (am - a0) / jm;
+    tj3 = (am - a3) / jm;
+
+    // Calculate the time required to meet the velocity condition
+    tj2 = (v3 - v0 - (2 * a0 * tj1) - (jm * tj1 * tj1) - (2 * a3 * tj3) - (jm * tj3 * tj3)) / (2 * am);
+
+    if (tj2 > 0) {
+        // then we have a solution that requires a constant acceleration phase
+        return [tj1, tj2, tj3]
     }
 
-    return [tj1, tj2]
+    // If we got this far, we need to solve for a different trajectory with no constant acceleration phase
+    const discriminant = safe_sqrt(0.5 * ((a0 * a0) + (a3 * a3) + jm * (v3 - v0)));
+    tj1 = (-a0 + discriminant) / jm;
+    tj2 = 0;
+    tj3 = (-a3 + discriminant) / jm;
+
+
+    return [tj1, tj2, tj3]
 }
 
 function should_begin_touchdown(hagl, a0, v0)
@@ -473,24 +469,6 @@ function should_begin_touchdown(hagl, a0, v0)
 
     // If we got this far then we havn't met all of the conditions to start the touch down
     return [false, future_pos, tj1, tj2];
-}
-
-
-function compute_trajectory_times(jm, am, a0, v0, v3)
-{
-    // Calculate first phase time period to achieve zero acceleration
-    tj1 = -a0/jm;
-
-    // Calculate v1 at the exit of the first phase
-    [ , , v1, ] = calc_javp_for_segment_incr_jerk(2.0 * tj1, tj1, jm, a0, v0, 0.0);
-
-    // Calculate jm2,3
-    jm23 = (2.0 * am * am) / (v3 - v1);
-
-    // Calculate 2nd and 3rd time periods
-    tj23 = am / jm23;
-
-    return [tj1, tj23, jm23];
 }
 
 // Crude simulation of heli in free-fall from a hover
@@ -584,6 +562,102 @@ function run_flare_model(sim, dt, t, j0, a0, v0, p0)
     return [jt, at, vt, pt];
 }
 
+// Calculate the touchdown trajectory
+let in_touchdown = false;
+let _tj1, _tj2, _tj3 = null;
+function run_simple_trajectory_model(t)
+{
+    A0 = parseFloat(document.getElementById("initial_accel").value);
+    V0 = parseFloat(document.getElementById("initial_vel").value);
+    P0 = parseFloat(document.getElementById("initial_pos").value);
+
+    if (!in_touchdown) {
+        [_tj1, _tj2, _tj3] = calc_scurve_trajectory_times(A0, V0);
+        in_touchdown = true;
+    }
+
+    return update_trajectory(t, A0, V0, P0, _tj1, _tj2, _tj3);
+}
+
+function update_trajectory(t, A0, V0, P0, tj1, tj2, tj3)
+{
+    const T1 = 2 * tj1;
+    const T2 = tj2;
+    const T3 = 2 * tj3;
+    Jm = parseFloat(document.getElementById("max_jerk").value);
+ 
+
+    // Phase 1
+    const t1 = Math.min(t, T1);
+    let [J1, A1, V1, P1] = calc_javp_for_segment_incr_jerk(t1, tj1, Jm, A0, V0, P0);
+
+    if ( t <= T1) {
+        // We are still in phase 1
+        return [J1, A1, V1, P1];
+    }
+
+    // Phase 2
+    const t2 = Math.min(t - T1, T2);
+    let [J2, A2, V2, P2] = calc_javp_for_segment_const_jerk(t2, J1, A1, V1, P1)
+
+    if ( t <= T1 + T2) {
+        // We are still in phase 2
+        return [J2, A2, V2, P2];
+    }
+
+    // Phase 3
+    const t3 = Math.min(t - T1 - T2, T3);
+    let [J3, A3, V3, P3] = calc_javp_for_segment_incr_jerk(t3, tj3, -Jm, A2, V2, P2);
+
+    if ( t <= T1 + T2 + T3) {
+        // we are still in phase 3
+        return [J3, A3, V3, P3];
+    }
+
+    // Phase 4
+    // Constant velocity descent ("after" the touchdown manouver)
+    t4 = t - T1 - T2 - T3
+    return calc_javp_for_segment_const_jerk(t4, J3, A3, V3, P3)
+}
+
+
+// A simple rotor model that approximates expected rotor head energy
+function update_rotor_energy_model(dt, imu_accel, Vt, headspeed_rpm)
+{
+    const blade_inertia = parseFloat(document.getElementById("blade_inertia").value);
+    const nBlades = parseFloat(document.getElementById("n_blades").value);
+    const rotor_head_inertia = blade_inertia * nBlades;
+    let head_energy = 0.5 * rotor_head_inertia * rpm_to_rads(headspeed_rpm)**2;
+
+    const chord = parseFloat(document.getElementById("chord").value);
+    const rotor_rad = parseFloat(document.getElementById("rotor_radius").value);
+    const solidity = (nBlades * chord) / ( M_PI * rotor_rad)
+    const mass = parseFloat(document.getElementById("mass").value);
+    const rotor_area = M_PI * rotor_rad ** 2;
+
+    // Calculate the coefficient of thrust needed for the required accel
+    const resultant_force = imu_accel * -1.0 * mass;
+    const CT = resultant_force / (DENSITY * rotor_area * rotor_rad**2 * rpm_to_rads(headspeed_rpm)**2);
+
+    // Compute power required
+    const k = parseFloat(document.getElementById("induced_power_factor").value);
+    const cd0 = parseFloat(document.getElementById("blade_cd0").value);
+    const Cp = (k * CT ** (3/2)) / safe_sqrt(2) + (solidity * cd0) / 8.0;
+    const power_required = Cp * DENSITY * rotor_area * rotor_rad**3 * rpm_to_rads(headspeed_rpm)**3;
+
+    // We gain some energy from descending
+    let power_in = resultant_force * Vt * -1.0; // -1 so that we have +ve power in to descend and -ve to climb
+
+    // update the remaining energy in the head
+    head_energy += (power_in - power_required)  * dt;
+    // Constrain energy to min 0
+    head_energy = Math.max(head_energy, 0.0);
+
+    // From remaining energy approximate the new headspeed
+    headspeed_rpm = rads_to_rpm(safe_sqrt(head_energy / (0.5 * rotor_head_inertia)));
+    return headspeed_rpm;
+}
+
 
 class Trajectory
 {
@@ -595,6 +669,8 @@ class Trajectory
         this.p = []; // pos (m)
         this.T1 = [];
         this.T2 = [];
+        this.T3 = [];
+        this.TTotal = [];
     }
 }
 
@@ -650,12 +726,12 @@ function update_defaults_then_run()
 
 function run_sim()
 {
+    // reset globals
+    in_touchdown = false;
+    _tj1 = null;
+    _tj2 = null;
+    _tj3 = null;
 
-    // console.log('jerk_plot.data =',  jerk_plot.data);
-    // console.log('accel_plot.data =', accel_plot.data);
-    // console.log('vel_plot.data  =',  vel_plot.data);
-    // console.log('pos_plot.data  =',  pos_plot.data);
-    // console.log('time_plot.data =', time_plot.data);
 
     const A0 = parseFloat(document.getElementById("initial_accel").value);
     const V0 = parseFloat(document.getElementById("initial_vel").value);
@@ -678,26 +754,17 @@ function run_sim()
     var calcd_traj = new Trajectory();
     var ap_imu_accel = [];
     var ap_gravity_adjusted_accel = [];
+
+    // Configure initial conditions
     let Jt = 0.0;
-
-    // At is the "simulation" acceleration.  This is the resultant acceleration that moves a body
-    if (initial_conditions == SCENARIO.INITIAL_COND.value) {
-        At = A0;
-    } else {
-        At = -GRAVITY;
-    }
-
+    let At = A0;
     let Vt = V0;
     let Pt = P0;
 
-    let in_touchdown = false;
-    let touchdown_finished = false;
     let touchdown_finished_time = 0;
     let touchdown_init = {t:0.0, a:0.0, v:0.0, p:0.0};
-    let tj1, tj2;
-    let jm23 = 0;
 
-    let P_end_hist = [];
+    // let P_end_hist = [];
 
     const flare_sim = {
         started: false,
@@ -713,113 +780,41 @@ function run_sim()
     // Calculate the Jm needed for the flare peak accel
     flare_sim.Jm = flare_sim.Am / flare_sim.tj;
 
-    // Identify which method we are using to calculate the trajectory
-    let method = parseFloat(document.getElementById("method_select").value)
-
     // remove gravity from measurement in last time step
     let imu_accel = (At + GRAVITY) * -1.0; // positive down
     let grav_adjusted_accel = -(imu_accel + GRAVITY);
 
-    // Head speed model variables
-    const blade_inertia = parseFloat(document.getElementById("blade_inertia").value);
-    const nBlades = parseFloat(document.getElementById("n_blades").value);
-    const rotor_head_inertia = blade_inertia * nBlades;
     let headspeed_rpm = parseFloat(document.getElementById("initial_rpm").value);
-    let head_energy = 0.5 * rotor_head_inertia * rpm_to_rads(headspeed_rpm)**2;
     let headspeed_hist = [];
 
     // Run simulation
     while (t < 100.0) {
 
+        if (initial_conditions == SCENARIO.HOVER_AUTOROTATION.value) {
+            [Jt, At, Vt, Pt] = run_freefall_model(dt, Vt, Pt);
 
-        let P_end;
-        if (!in_touchdown) {
+        } else if (initial_conditions == SCENARIO.FLARING.value){
+            [Jt, At, Vt, Pt] = run_flare_model(flare_sim, dt, t, Jt, At, Vt, Pt)
 
-            if (initial_conditions == SCENARIO.HOVER_AUTOROTATION.value) {
-                [Jt, At, Vt, Pt] = run_freefall_model(dt, Vt, Pt);
-
-            } else if (initial_conditions == SCENARIO.FLARING.value){
-                [Jt, At, Vt, Pt] = run_flare_model(flare_sim, dt, t, Jt, At, Vt, Pt)
-
-            } else { //INITIAL_COND
-                [Jt, At, Vt, Pt] = [0.0,
-                                    (parseFloat(document.getElementById("initial_accel").value) * -1.0) - GRAVITY, // At - Initial accel is defined in the gravity adjust +ve up frame
-                                    parseFloat(document.getElementById("initial_vel").value),   // Vt
-                                    parseFloat(document.getElementById("initial_pos").value)]   // Pt
-            }
-
-            // Calculate the s-curve trajectory look forward position
-            [in_touchdown, P_end, tj1, tj2] = should_begin_touchdown(Pt, grav_adjusted_accel, Vt);
-            P_end_hist.push(P_end);
-
-            // keep flare init up to date
-            touchdown_init.t = t;
-            touchdown_init.a = grav_adjusted_accel;
-            touchdown_init.v = Vt;
-            touchdown_init.p = Pt;
-
-            // we may want to force the touchdown if we are in the specifiy initial conditiond mode
-            in_touchdown = in_touchdown || initial_conditions == SCENARIO.INITIAL_COND.value;
-
-        } else if (!touchdown_finished) {
-            const flare_time = t - touchdown_init.t;
-
-            [Jt, At, Vt, Pt] = update_scurve_trajectory(flare_time, tj1, tj2, touchdown_init.a, touchdown_init.v, touchdown_init.p, Jm);
-            // Check if we meet the exit conditions for the flare
-            touchdown_finished = t >= touchdown_init.t + (tj1 + tj2) * 2.0;
-
-            // Add values to keep array length correct
-            P_end_hist.push(P2);
-
-            // Keep the flare exit time up to date
-            touchdown_finished_time = t;
-
-        } else {
-            // Assume constant accel at exit condition (not updating accel and jerk)
-            const initial_V = Vt;
-            Vt = initial_V + At * dt;
-            Pt += initial_V * dt + 0.5 * At * dt * dt;
+        } else { //INITIAL_COND
+            [Jt, At, Vt, Pt] = run_simple_trajectory_model(t)
         }
 
-        // Update approximation of headspeed/energy model (only for case when initial conditions are prescribed)
-        if (initial_conditions == SCENARIO.INITIAL_COND.value) {
 
-            const chord = parseFloat(document.getElementById("chord").value);
-            const rotor_rad = parseFloat(document.getElementById("rotor_radius").value);
-            const solidity = (nBlades * chord) / ( M_PI * rotor_rad)
-            const mass = parseFloat(document.getElementById("mass").value);
-            const rotor_area = M_PI * rotor_rad ** 2;
+        headspeed_rpm = update_rotor_energy_model(dt, imu_accel, Vt, headspeed_rpm)
 
-            // Calculate the coefficient of thrust needed for the required accel
-            const resultant_force = imu_accel * -1.0 * mass;
-            const CT = resultant_force / (DENSITY * rotor_area * rotor_rad**2 * rpm_to_rads(headspeed_rpm)**2);
-
-            // Compute power required
-            const k = parseFloat(document.getElementById("induced_power_factor").value);
-            const cd0 = parseFloat(document.getElementById("blade_cd0").value);
-            const Cp = (k * CT ** (3/2)) / safe_sqrt(2) + (solidity * cd0) / 8.0;
-            const power_required = Cp * DENSITY * rotor_area * rotor_rad**3 * rpm_to_rads(headspeed_rpm)**3;
-
-            // We gain some energy from descending
-            let power_in = resultant_force * Vt * -1.0; // -1 so that we have +ve power in to descend and -ve to climb
-
-            // update the remaining energy in the head
-            head_energy += (power_in - power_required)  * dt;
-            // Constrain energy to min 0
-            head_energy = Math.max(head_energy, 0.0);
-
-            // From remaining energy approximate the new headspeed
-            headspeed_rpm = rads_to_rpm(safe_sqrt(head_energy / (0.5 * rotor_head_inertia)));
-            headspeed_hist.push(headspeed_rpm)
-        }
-
+        // Store variables for plotting time-history
         time.push(t)
         calcd_traj.j.push(Jt);
         calcd_traj.a.push(At);
         calcd_traj.v.push(Vt);
         calcd_traj.p.push(Pt);
-        calcd_traj.T1.push(tj1*2);
-        calcd_traj.T2.push(tj2*2);
+        calcd_traj.T1.push(_tj1*2);
+        calcd_traj.T2.push(_tj2);
+        calcd_traj.T3.push(_tj3*2);
+        calcd_traj.TTotal.push((_tj1 + _tj3) * 2 + _tj2);
+
+        headspeed_hist.push(headspeed_rpm)
 
         // Account for the change of reference frame/convention to plot the accelerations
         imu_accel = (At + GRAVITY) * -1.0; // positive down
@@ -828,10 +823,13 @@ function run_sim()
         ap_imu_accel.push(imu_accel)
         ap_gravity_adjusted_accel.push(grav_adjusted_accel)
 
-        // Break from simulation
-        if (touchdown_finished && Pt <= 0) {
-            break;
-        }
+        // hit the ground, break from simulation
+        // if (Pt <= 0) {
+        //     break;
+        // }
+        // if (t > 10) {
+        //     break;
+        // }
 
         // update time for the next time step
         t += dt; 
@@ -910,8 +908,8 @@ function run_sim()
     pos_plot.data[2].y = p_min_max;
     pos_plot.data[3].x = time;
     pos_plot.data[3].y = calcd_traj.p;
-    pos_plot.data[4].x = time;
-    pos_plot.data[4].y = P_end_hist;
+    // pos_plot.data[4].x = time;
+    // pos_plot.data[4].y = P_end_hist;
     Plotly.redraw("pos_plot");
 
 
@@ -919,6 +917,10 @@ function run_sim()
     time_plot.data[0].y = calcd_traj.T1;
     time_plot.data[1].x = time;
     time_plot.data[1].y = calcd_traj.T2;
+    time_plot.data[2].x = time;
+    time_plot.data[2].y = calcd_traj.T3;
+    time_plot.data[3].x = time;
+    time_plot.data[3].y = calcd_traj.TTotal;
     Plotly.redraw("time_plot");
 
     const hs_min_max = [Math.min(...headspeed_hist), Math.max(...headspeed_hist)];
