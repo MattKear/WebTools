@@ -273,7 +273,7 @@ $$
 Noting that $2\,a_0\,\Delta a - \Delta a^2 = a_0^2 - a_2^2$, yielding the quadratic in $t_{j1}$:
 
 $$
-2\,j_m^2\,t_{j1}^2 + 4\,a_0\,j_m\,t_{j1} +  = 0
+2\,j_m^2\,t_{j1}^2 + 4\,a_0\,j_m\,t_{j1} + a_0^2 - a_2^2 - j_m \, (v_2 - v_0) = 0
 $$
 
 $$

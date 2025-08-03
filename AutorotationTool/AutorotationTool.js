@@ -263,86 +263,6 @@ function safe_sqrt(x)
     return ret
 }
 
-function linspace(start, end, num)
-{
-    const result = [];
-    const step = (end - start) / (num - 1);
-
-    for (let i = 0; i < num; i++) {
-      result.push(start + (step * i));
-    }
-
-    return result;
-}
-
-function calc_peak_jerk_required(tj, A0, A1)
-{
-    return (A1 - A0) * 2.0 / tj;
-}
-
-// special handling function to adapt the enumbent s-curve maths to fit the trajectory of the autorotation
-function arot_s_curve(time_now, T, Jm, A0, V0, P0, Af)
-{
-    // The 1/4 time is because S-curve definition expects the time period in a different factor to what we need in the autorotation
-    tj = T * 0.25;
-
-    // handle the positive jerk (increasing accel in the first half of the flare time)
-    if (time_now <= tj*2.0) {
-        return calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0);
-    }
-
-    // if we got this far then we are doing the negative jerk portion of the trajectory
-    // first we need to calculate the initial conditions of the negative trajectory, these are the exit conditions of the positive jerk trajectory
-    let [J1, A1, V1, P1] = calc_javp_for_segment_incr_jerk(tj*2.0, tj, Jm, A0, V0, P0);
-
-    // calculate the peak jerk requried to achieve the requested exit conditions
-    let JM_sec_phase = calc_peak_jerk_required(tj*2.0, A1, Af);
-    let t_sec_phase = time_now - tj*2.0;
-    return calc_javp_for_segment_incr_jerk(t_sec_phase, tj, JM_sec_phase, A1, V1, P1);
-}
-
-// special handling function to adapt the enumbent s-curve maths to fit the trajectory of the autorotation
-function update_scurve_trajectory(time_now, tj1, tj2, A0, V0, P0, Jm)
-{
-    if (!is_positive(tj1) || !is_positive(tj2)) {
-        // throw new Error('We should not have been able to get negative times here');
-        console.log('Got non-positive times')
-    }
-
-    const T1 = tj1 * 2.0;
-    const T2 = tj2 * 2.0;
-    const v2 = parseFloat(document.getElementById("final_vel").value);
-
-    let sign = -1.0
-    if (V0 < v2) {
-        sign = 1.0;
-    }
-    Jm *= sign;
-
-    // Calculate the trajectory based
-    if (time_now <= T1) {
-        // handle first segment trajectory
-        return calc_javp_for_segment_incr_jerk(time_now, tj1, Jm, A0, V0, P0);
-
-    } else if (time_now <= T1 + T2) {
-        // handle 2nd segment trajectory
-        // first we need to calculate the initial conditions from the exit conditions of the first phase
-        let [J1, A1, V1, P1] = calc_javp_for_segment_incr_jerk(T1, tj1, Jm, A0, V0, P0);
-
-        let t2 = time_now - T1;
-        return calc_javp_for_segment_incr_jerk(t2, tj2, -Jm, A1, V1, P1);
-
-    } else {
-        // handle 3rd segment trajectory
-        // first we need to calculate the initial conditions from the exit conditions of the first & 2nd phases
-        let [J1, A1, V1, P1] = calc_javp_for_segment_incr_jerk(T1, tj1, Jm, A0, V0, P0);
-        let [J2, A2, V2, P2] = calc_javp_for_segment_incr_jerk(T2, tj2, -Jm, A1, V1, P1);
-
-        let t3 = time_now - T1 - T2;
-        return calc_javp_for_segment_const_jerk(t3, J2, A2, V2, P2);
-    }
-}
-
 // Calculate the jerk, acceleration, velocity and position at time time_now when running the increasing jerk magnitude time segment based on a raised cosine profile
 function calc_javp_for_segment_incr_jerk(time_now, tj, Jm, A0, V0, P0)
 {
@@ -369,17 +289,77 @@ function calc_javp_for_segment_const_jerk(time_now, J0, A0, V0, P0)
     return [Jt, At, Vt, Pt];
 }
 
-function calc_scurve_trajectory_times(a0, v0)
+// helper to calculate the expected final velocity in the trajectory
+function calc_final_vel(tj1, jm, a0, a3, v0)
+{
+    return (2 * jm * tj1**2) + (4 * a0 * tj1) + ((a0**2 - a3**2) / jm) + v0;
+}
+
+function calc_section_end_vel(tj, jm, a0, v0)
+{
+    return v0 + (2 * a0 * tj) + (jm * tj**2);
+}
+
+// Helper to calculate the expected final accel in the trajectory
+function calc_final_accel(tj1, tj3, jm, a0)
+{
+    return a0 + jm * (tj1 - tj3);
+}
+
+// Helper to calculate the expected final accel in the trajectory
+function calc_peak_accel(tj1, jm, a0)
+{
+    return a0 + jm * tj1;
+}
+
+// Solving for roots of the continuity equations in the non-accel limited case
+function calc_cosine_trajectory_times(a0, v0, a3, v3, jm)
+{
+    let solution_valid = false;
+    let discriminant = 0.5 * ((a0 * a0) + (a3 * a3) + jm * (v3 - v0));
+    if (discriminant < 0) {
+        console.log('Discrementant is negative')
+        return [null, null, solution_valid];
+    }
+
+    discriminant = safe_sqrt(discriminant);
+    const tj1 = (-a0 + discriminant) / jm;
+    const tj3 = (-a3 + discriminant) / jm;
+
+    solution_valid = is_positive(tj1) && is_positive(tj3)
+
+    return [tj1, tj3, solution_valid];
+}
+
+
+function calc_scurve_trajectory_times(a0, v0, p0)
 {
     const v3 = parseFloat(document.getElementById("final_vel").value);
-    const a3 = parseFloat(document.getElementById("final_accel").value);
-    const jm = parseFloat(document.getElementById("max_jerk").value);
-    const am = parseFloat(document.getElementById("max_vert_accel").value);
+    const a3 = 0.0;
+    let jm = parseFloat(document.getElementById("max_jerk").value);
 
-    // Identify if we are using a positive or negitive jerk section to begin with
+    let tj1 = 0, tj2 = 0, tj3 = 0;
+    let solution_valid = false;
+    // Due to the assumed trajectory shape that has been constructed, we wait for the entry velocity to be <= to the exit condition
+    // This reduces the number of scenarios that we need to handle and simplifies the code structure, focusing on the most probable cases.
+    // For this application, we can simply wait for the descent rate to increase which is an assured thing in an autorotation.
+    if (v0 > v3) {
+        console.log("initial conditions not suiable to enter touch down")
+        return [tj1, tj2, tj3, solution_valid];
+    }
 
-    let tj1, tj2, tj3;
+    // start by calculating the unconstrained acceleration trajectory to get the times needed for this case
+    [tj1, tj3, solution_valid] = calc_cosine_trajectory_times(a0, v0, a3, v3, jm);
 
+    // See if we need to apply acceleration limiting
+    let am = parseFloat(document.getElementById("max_vert_accel").value);
+    let a_peak = calc_peak_accel(tj1, jm, a0)
+    if (a_peak < am && solution_valid) {
+        // we do not need to apply any accel limits, we can begin touch down
+        return [tj1, tj2, tj3, solution_valid];
+    }
+
+    // If we got this far we either need to apply accel limits or the previously invalid solution my have a solution with this approach
     // Calculate the time periods required to meet the acceleration boundary conditions
     tj1 = (am - a0) / jm;
     tj3 = (am - a3) / jm;
@@ -387,89 +367,84 @@ function calc_scurve_trajectory_times(a0, v0)
     // Calculate the time required to meet the velocity condition
     tj2 = (v3 - v0 - (2 * a0 * tj1) - (jm * tj1 * tj1) - (2 * a3 * tj3) - (jm * tj3 * tj3)) / (2 * am);
 
-    if (tj2 > 0) {
-        // then we have a solution that requires a constant acceleration phase
-        return [tj1, tj2, tj3]
-    }
+    // Check that the exit conditions match our desired conditions
+    const T = (tj1 + tj3) * 2 + tj2;
+    let [je, ae, ve, pe] = update_trajectory(T, a0, v0, p0, tj1, tj2, tj3)
 
-    // If we got this far, we need to solve for a different trajectory with no constant acceleration phase
-    const discriminant = safe_sqrt(0.5 * ((a0 * a0) + (a3 * a3) + jm * (v3 - v0)));
-    tj1 = (-a0 + discriminant) / jm;
-    tj2 = 0;
-    tj3 = (-a3 + discriminant) / jm;
+    const TOL = 1e-5;
+    solution_valid = ((Math.abs(ve - v3) < TOL) && (Math.abs(ae - a3) < TOL));
 
-
-    return [tj1, tj2, tj3]
+    return [tj1, tj2, tj3, solution_valid];
 }
 
-function should_begin_touchdown(hagl, a0, v0)
-{
-    const touchdown_max_height = parseFloat(document.getElementById("touchdown_max_height").value);
-    if (hagl > touchdown_max_height) {
-        return [false, null, null, null];
-    }
+// function should_begin_touchdown(hagl, a0, v0)
+// {
+//     const touchdown_max_height = parseFloat(document.getElementById("touchdown_max_height").value);
+//     if (hagl > touchdown_max_height) {
+//         return [false, null, null, null];
+//     }
 
-    // if (v0 > -1.0) {
-    //     console.log('Descent vel not below -1.0')
-    //     return [false, null, null, null];
-    // }
+//     // if (v0 > -1.0) {
+//     //     console.log('Descent vel not below -1.0')
+//     //     return [false, null, null, null];
+//     // }
 
-    const [tj1, tj2] = calc_scurve_trajectory_times(a0, v0);
-
-
-
-    const jm = parseFloat(document.getElementById("max_jerk").value);
-    const v2 = parseFloat(document.getElementById("final_vel").value);
-
-    let future_pos = null;
-    if (!is_positive(tj1) || !is_positive(tj2)) {
-        // Some combinations of boundary conditions will result in non-positive time periods, these are are fairly inocuous
-        // we just wait until the next call back when the initial conditions will have change by a small amount to result in
-        // a valid solution.
-        return [false, null, null, null];
-    }
-
-    const accelerating_case = v0 > v2
-
-    if (accelerating_case) {
-        // We are going to accelerate from the initial velocity to the final velocity
-        // Look ahead to end of first phase scurve to get initial conditions for 2nd phase
-        const [j1, a1, v1, p1] = calc_javp_for_segment_incr_jerk(tj1 * 2.0, tj1, jm * -1.0, a0, v0, hagl);
-
-        // Look ahead to end of second phase scurve to get exit conditions
-        [ , , , future_pos] = calc_javp_for_segment_incr_jerk(tj2 * 2.0, tj2, jm, a1, v1, p1);
+//     const [tj1, tj2] = calc_scurve_trajectory_times(a0, v0);
 
 
-    } else {
-        // We need to deccelerate from the initial velocity to the final velocity
-        // Look ahead to end of first phase scurve to get initial conditions for 2nd phase
-        const [j1, a1, v1, p1] = calc_javp_for_segment_incr_jerk(tj1 * 2.0, tj1, jm, a0, v0, hagl);
 
-        // Look ahead to end of second phase scurve to get exit conditions
-        [ , , , future_pos] = calc_javp_for_segment_incr_jerk(tj2 * 2.0, tj2, jm * -1.0, a1, v1, p1);
+//     const jm = parseFloat(document.getElementById("max_jerk").value);
+//     const v2 = parseFloat(document.getElementById("final_vel").value);
 
-    }
+//     let future_pos = null;
+//     if (!is_positive(tj1) || !is_positive(tj2)) {
+//         // Some combinations of boundary conditions will result in non-positive time periods, these are are fairly inocuous
+//         // we just wait until the next call back when the initial conditions will have change by a small amount to result in
+//         // a valid solution.
+//         return [false, null, null, null];
+//     }
 
-    // If the future position from just the first two phases is below the buffer height, we definitley need to start the touch down
-    // We are likely to have a hard landing.
-    const BUFFER_HEIGHT = parseFloat(document.getElementById("final_pos").value);
-    if (future_pos <= BUFFER_HEIGHT) {
-        [true, future_pos, tj1, tj2]
-    }
+//     const accelerating_case = v0 > v2
 
-    const touchdown_time = parseFloat(document.getElementById("flare_time").value);
-    // Now we see if we can still land when using the constant descent speed phase within the time prescribed by the parameter
-    const tj3 = (future_pos - BUFFER_HEIGHT) / Math.abs(v2);
-    const time_to_land = tj1 + tj2 + tj3;
+//     if (accelerating_case) {
+//         // We are going to accelerate from the initial velocity to the final velocity
+//         // Look ahead to end of first phase scurve to get initial conditions for 2nd phase
+//         const [j1, a1, v1, p1] = calc_javp_for_segment_incr_jerk(tj1 * 2.0, tj1, jm * -1.0, a0, v0, hagl);
 
-    if (time_to_land <= touchdown_time) {
-        // We can make it to the ground in the specified time
-        [true, future_pos, tj1, tj2]
-    }
+//         // Look ahead to end of second phase scurve to get exit conditions
+//         [ , , , future_pos] = calc_javp_for_segment_incr_jerk(tj2 * 2.0, tj2, jm, a1, v1, p1);
 
-    // If we got this far then we havn't met all of the conditions to start the touch down
-    return [false, future_pos, tj1, tj2];
-}
+
+//     } else {
+//         // We need to deccelerate from the initial velocity to the final velocity
+//         // Look ahead to end of first phase scurve to get initial conditions for 2nd phase
+//         const [j1, a1, v1, p1] = calc_javp_for_segment_incr_jerk(tj1 * 2.0, tj1, jm, a0, v0, hagl);
+
+//         // Look ahead to end of second phase scurve to get exit conditions
+//         [ , , , future_pos] = calc_javp_for_segment_incr_jerk(tj2 * 2.0, tj2, jm * -1.0, a1, v1, p1);
+
+//     }
+
+//     // If the future position from just the first two phases is below the buffer height, we definitley need to start the touch down
+//     // We are likely to have a hard landing.
+//     const BUFFER_HEIGHT = parseFloat(document.getElementById("final_pos").value);
+//     if (future_pos <= BUFFER_HEIGHT) {
+//         [true, future_pos, tj1, tj2]
+//     }
+
+//     const touchdown_time = parseFloat(document.getElementById("flare_time").value);
+//     // Now we see if we can still land when using the constant descent speed phase within the time prescribed by the parameter
+//     const tj3 = (future_pos - BUFFER_HEIGHT) / Math.abs(v2);
+//     const time_to_land = tj1 + tj2 + tj3;
+
+//     if (time_to_land <= touchdown_time) {
+//         // We can make it to the ground in the specified time
+//         [true, future_pos, tj1, tj2]
+//     }
+
+//     // If we got this far then we havn't met all of the conditions to start the touch down
+//     return [false, future_pos, tj1, tj2];
+// }
 
 // Crude simulation of heli in free-fall from a hover
 function run_freefall_model(dt, v0, p0)
@@ -564,7 +539,7 @@ function run_flare_model(sim, dt, t, j0, a0, v0, p0)
 
 // Calculate the touchdown trajectory
 let in_touchdown = false;
-let _tj1, _tj2, _tj3 = null;
+let _tj1, _tj2, _tj3;
 function run_simple_trajectory_model(t)
 {
     A0 = parseFloat(document.getElementById("initial_accel").value);
@@ -572,8 +547,7 @@ function run_simple_trajectory_model(t)
     P0 = parseFloat(document.getElementById("initial_pos").value);
 
     if (!in_touchdown) {
-        [_tj1, _tj2, _tj3] = calc_scurve_trajectory_times(A0, V0);
-        in_touchdown = true;
+        [_tj1, _tj2, _tj3, in_touchdown] = calc_scurve_trajectory_times(A0, V0, P0);
     }
 
     return update_trajectory(t, A0, V0, P0, _tj1, _tj2, _tj3);
@@ -584,8 +558,8 @@ function update_trajectory(t, A0, V0, P0, tj1, tj2, tj3)
     const T1 = 2 * tj1;
     const T2 = tj2;
     const T3 = 2 * tj3;
-    Jm = parseFloat(document.getElementById("max_jerk").value);
- 
+    const Jm = parseFloat(document.getElementById("max_jerk").value);
+
 
     // Phase 1
     const t1 = Math.min(t, T1);
@@ -736,12 +710,7 @@ function run_sim()
     const A0 = parseFloat(document.getElementById("initial_accel").value);
     const V0 = parseFloat(document.getElementById("initial_vel").value);
     const P0 = parseFloat(document.getElementById("initial_pos").value);
-
-    const V2 = parseFloat(document.getElementById("final_vel").value);
-    const P2 = parseFloat(document.getElementById("final_pos").value);
-
-    const Jm = parseFloat(document.getElementById("max_jerk").value);
-    const Am = parseFloat(document.getElementById("max_vert_accel").value);
+    const flare_time = parseFloat(document.getElementById("flare_time").value);
 
     // Identify which initial conditions we are using
     let initial_conditions = parseFloat(document.getElementById("initial_conditions_select").value)
@@ -787,11 +756,19 @@ function run_sim()
     let headspeed_rpm = parseFloat(document.getElementById("initial_rpm").value);
     let headspeed_hist = [];
 
+    let rotor_cd = 0;
+    if (initial_conditions == SCENARIO.HOVER_AUTOROTATION.value) {
+        // approximate a rotor drag coefficient from the provided initial conditions
+        const rotor_rad = parseFloat(document.getElementById("rotor_radius").value);
+        const rotor_area = M_PI * rotor_rad ** 2;
+        rotor_cd = (GRAVITY + A0) * mass / (0.5 * DENSITY * rotor_area * V0**2);
+    }
+
     // Run simulation
     while (t < 100.0) {
 
         if (initial_conditions == SCENARIO.HOVER_AUTOROTATION.value) {
-            [Jt, At, Vt, Pt] = run_freefall_model(dt, Vt, Pt);
+            [Jt, At, Vt, Pt] = run_freefall_model(dt, rotor_cd, Vt, Pt);
 
         } else if (initial_conditions == SCENARIO.FLARING.value){
             [Jt, At, Vt, Pt] = run_flare_model(flare_sim, dt, t, Jt, At, Vt, Pt)
@@ -823,13 +800,10 @@ function run_sim()
         ap_imu_accel.push(imu_accel)
         ap_gravity_adjusted_accel.push(grav_adjusted_accel)
 
-        // hit the ground, break from simulation
-        // if (Pt <= 0) {
-        //     break;
-        // }
-        // if (t > 10) {
-        //     break;
-        // }
+        // hit the ground and flare time has expried, break from simulation
+        if (Pt <= 0 && t > flare_time) {
+            break;
+        }
 
         // update time for the next time step
         t += dt; 
