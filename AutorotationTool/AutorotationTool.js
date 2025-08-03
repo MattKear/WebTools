@@ -321,6 +321,16 @@ function calc_peak_accel(tj1, jm, a0)
     return a0 + jm * tj1;
 }
 
+// helper to ensure landing speed is always negative and down
+function get_landing_speed()
+{
+    let landing_speed = parseFloat(document.getElementById("landing_speed").value);
+    landing_speed = Math.abs(landing_speed);
+    landing_speed = Math.max(landing_speed, 0.2);
+    landing_speed *= -1.0;
+    return landing_speed
+}
+
 // Solving for roots of the continuity equations in the non-accel limited case
 function calc_cosine_trajectory_times(a0, v0, a3, v3, jm)
 {
@@ -340,10 +350,9 @@ function calc_cosine_trajectory_times(a0, v0, a3, v3, jm)
     return [tj1, tj3, solution_valid];
 }
 
-
 function calc_scurve_trajectory_times(a0, v0, p0)
 {
-    const v3 = parseFloat(document.getElementById("final_vel").value);
+    const v3 = get_landing_speed();
     const a3 = 0.0;
     let jm = parseFloat(document.getElementById("max_jerk").value);
 
@@ -353,7 +362,7 @@ function calc_scurve_trajectory_times(a0, v0, p0)
     // This reduces the number of scenarios that we need to handle and simplifies the code structure, focusing on the most probable cases.
     // For this application, we can simply wait for the descent rate to increase which is an assured thing in an autorotation.
     if (v0 > v3) {
-        console.log("initial conditions not suiable to enter touch down")
+        console.log("initial conditions not suitable to enter touch down")
         return [tj1, tj2, tj3, solution_valid];
     }
 
@@ -400,9 +409,9 @@ function should_begin_touchdown(hagl, a0, v0)
     }
 
     // Check min height, target speed condition, this case designed for the very low hover autorotation case
-    const min_flare_height = parseFloat(document.getElementById("final_pos").value);
-    const desired_v3 = parseFloat(document.getElementById("final_vel").value);
-    if ((hagl < min_flare_height) && (v0 <= desired_v3)) {
+    const min_touchdown_height = parseFloat(document.getElementById("touchdown_min_height").value);
+    const desired_v3 = get_landing_speed();
+    if ((hagl < min_touchdown_height) && (v0 <= desired_v3)) {
         // Set all trajectory times to zero to jump to constant descent rate case
         _tj1 = 0;
         _tj2 = 0;

@@ -147,31 +147,6 @@
 
     <td>
       <fieldset  class="boxClass">
-        <legend>Final Conditions
-            <img id="TT" src="../images/question-circle.svg" style="width: 1em; vertical-align: bottom" 
-            data-tippy-content='The measurements at the end of the flare phase, as the vehicle transitions in to the touchdown phase.',
-            data-tippy-maxWidth='750px'/>
-        </legend>
-
-        <!-- <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="final_accel" value="0" min="0" step="0.1" max="10" style="width: 50px" onchange="run_sim()">
-          <label for="final_accel">Acceleration (m/s²)</label>
-        </p> -->
-
-        <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="final_vel" value="-0.5" min="-20" step="0.5" max="0" style="width: 50px" onchange="run_sim()">
-          <label for="final_vel">Velocity (m/s)</label>
-        </p>
-
-        <p style="margin-top:5px; margin-bottom:5px;">
-          <input type="number" id="final_pos" value="0.5" min="0.5" step="0.5" max="100" style="width: 50px" onchange="run_sim()">
-          <label for="final_pos">Position (m)</label>
-        </p>
-      </fieldset>
-    </td>
-
-    <td>
-      <fieldset  class="boxClass">
         <legend>Parameters
             <img id="TT" src="../images/question-circle.svg" style="width: 1em; vertical-align: bottom" 
             data-tippy-content='The parameter values that the user has to define the curve',
@@ -194,8 +169,18 @@
         </p>
 
         <p style="margin-top:5px; margin-bottom:5px;">
+          <input type="number" id="touchdown_min_height" value="0.5" min="0.0" step="0.1" max="10" style="width: 50px" onchange="run_sim()">
+          <label for="touchdown_min_height">Touchdown Min Height (m)</label>
+        </p>
+
+        <p style="margin-top:5px; margin-bottom:5px;">
           <input type="number" id="touchdown_time" value="2" min="1" step="0.1" max="15" style="width: 50px" onchange="run_sim()">
-          <label for="touchdown_time">Touchdown Time (s) (T)</label>
+          <label for="touchdown_time">Touchdown Time (s)</label>
+        </p>
+
+        <p style="margin-top:5px; margin-bottom:5px;">
+          <input type="number" id="landing_speed" value="0.5" min="0.5" step="0.1" max="5.0" style="width: 50px" onchange="run_sim()">
+          <label for="landing_speed">Landing Speed (m/s)</label>
         </p>
 
       </fieldset>
