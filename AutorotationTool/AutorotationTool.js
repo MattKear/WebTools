@@ -491,6 +491,9 @@ function run_freefall_model(t, dt, v0, p0, headspeed_rpm)
 
         in_touchdown = should_begin_touchdown(pt, at, vt)
 
+        // update the manoeuvre exit time
+        touchdown_finished_time = (_tj1 + _tj3) * 2 + _tj2 + touchdown_init.t;
+
         // keep touch down init conditions up to date
         touchdown_init.t = t
         touchdown_init.a = at
@@ -584,6 +587,7 @@ function run_simple_trajectory_model(t)
     if (!in_touchdown) {
         // [_tj1, _tj2, _tj3, in_touchdown] = calc_scurve_trajectory_times(A0, V0, P0);
         in_touchdown = should_begin_touchdown(P0, A0, V0);
+        touchdown_finished_time = (_tj1 + _tj3) * 2 + _tj2 + touchdown_init.t;
     }
 
     return update_trajectory(t, A0, V0, P0, _tj1, _tj2, _tj3);
@@ -739,6 +743,7 @@ function update_defaults_then_run()
 
 
 let touchdown_init = {t:0.0, a:0.0, v:0.0, p:0.0};
+let touchdown_finished_time = 0;
 function run_sim()
 {
     // reset globals
@@ -747,6 +752,7 @@ function run_sim()
     _tj2 = null;
     _tj3 = null;
     predicted_position = null;
+    touchdown_finished_time = null;
 
 
     const A0 = parseFloat(document.getElementById("initial_accel").value);
@@ -771,7 +777,7 @@ function run_sim()
     let Vt = V0;
     let Pt = P0;
 
-    let touchdown_finished_time = 0;
+    
     touchdown_init = {t:0.0, a:0.0, v:0.0, p:0.0};
 
     let P_end_hist = [];
